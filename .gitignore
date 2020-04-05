@@ -1,0 +1,10 @@
+output/
+keil*/DebugConfig
+*.uvguix.*
+*.uvgui.*
+*.scvd
+keil*/Jlink*
+*.vscode
+*__pycache__*
+cubeprj/*/*/
+.mxproject
