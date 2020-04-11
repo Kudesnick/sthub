@@ -1,13 +1,13 @@
 /**
- *  @file       bsp_spi.h
+ *  @file       hub.h
  *
- *  @brief      hardware independent settings of SPI interface
+ *  @brief      
  *
  *  @details
  *
- *  @author     Stulov Tikhon (kudesnick@inbox.ru)
+ *  @author     Stulov Tikhon
  *
- *  @date       2020/03/08
+ *  @date       2020/04/11
  */
 
 #pragma once
@@ -19,12 +19,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /***************************************************************************************************
  *                                           DEFINITIONS                                           *
  **************************************************************************************************/
-
-#define BUF_RX_LEN 64
-#define BUF_RX_CNT 16
 
 /***************************************************************************************************
  *                                          PUBLIC TYPES                                           *
@@ -38,13 +39,17 @@
  *                                    PUBLIC FUNCTION PROTOTYPES                                   *
  **************************************************************************************************/
 
-void bsp_spi_init(void);
+void bsp_uart_init(void);
 
-bool bsp_spi_tx(const uint8_t *const _data, const uint8_t _size);
+bool bsp_uart_tx(const uint8_t _n, const uint8_t *const _data, const uint8_t _size);
 
-void bsp_spi_tx_callback(const bool _ok);
+void bsp_uart_tx_callback(const uint8_t _n, const bool _ok);
 
-bool bsp_spi_rx_callback(uint8_t *const _data);
+bool bsp_uart_rx_callback(uint8_t *const _data);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 /***************************************************************************************************
  *                                        END OF FILE

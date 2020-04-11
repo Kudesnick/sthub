@@ -73,7 +73,7 @@ typedef struct
  *                                           PRIVATE DATA
  **************************************************************************************************/
 
-const bsp_uart_unit_t uart[] =
+const bsp_uart_unit_t uart[UART_CNT] =
 {
     {
         .uart           = UART0_UNIT     ,
@@ -147,7 +147,7 @@ const bsp_uart_unit_t uart[] =
     },
 };
 
-buf_t buf[countof(uart)];
+buf_t buf[UART_CNT];
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -255,16 +255,17 @@ static __INLINE void _rcc_reset(const void *const _u)
 
 static void _rx_callback(const uint8_t _n)
 {
-    buf_t *const buf_tmp = &buf[_n];
+    buf_t * buf_tmp = &buf[_n];
     
-    if (bsp_uart_rx_callback(_n, buf_tmp->data[buf_tmp->cnt], buf_tmp->ptr))
+    buf_tmp->data[buf_tmp->cnt][1] = buf_tmp->ptr;
+    if (bsp_uart_rx_callback(buf_tmp->data[buf_tmp->cnt]))
     {
         if (++buf_tmp->cnt >= countof(buf_tmp->data))
         {
             buf_tmp->cnt = 0;
         }
     }
-    buf_tmp->ptr = 0;
+    buf_tmp->ptr = 2;
 }
 
 static __INLINE void _uart_irq_hdl(const uint8_t _n)
@@ -481,12 +482,18 @@ void UART9_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[9]);}
 
 void bsp_uart_init(void)
 {
-    for (uint8_t i = 0; i < countof(uart); i++)
+    for (uint8_t i = 0; i < UART_CNT; i++)
     {
         _uart_init(i);
+        
+        for (uint8_t j = 0; j < UART_RX_BUF_NUM; j++)
+        {
+            buf[i].data[j][0] = i;
+        }
+        buf[i].ptr = 2;
     }
     
-#if (0) // defined(DEBUG)
+#ifdef DEBUG_BSP
     static const uint8_t data[] = {0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
     
     for (uint8_t i = 0; i < 5; i++)
@@ -525,9 +532,9 @@ __WEAK void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
     BSP_PRINTF("<uart#%d> UART TX complete callback. Result: %s\r\n", _n, (_ok) ? "true" : "false");
 }
 
-__WEAK bool bsp_uart_rx_callback(const uint8_t _n, const uint8_t *const _data, const uint8_t _size)
+__WEAK bool bsp_uart_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", _n, (uint32_t)_data, _size);
+    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", data[0], (uint32_t)_data, data[1]);
     
     return true;
 }

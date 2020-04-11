@@ -32,9 +32,6 @@
 
 #define UART_BAUD           (115200UL)
 
-#define UART_RX_BUF_SIZE    (128U)
-#define UART_RX_BUF_NUM     (2U)
-
 #define UART0_UNIT              USART1
 #define UART0_IRQ_HNDL          USART1_IRQHandler
 #define UART0_PIN               PORTA_15

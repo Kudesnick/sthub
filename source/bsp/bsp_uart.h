@@ -24,13 +24,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /***************************************************************************************************
  *                                           DEFINITIONS                                           *
  **************************************************************************************************/
+
+#define UART_RX_BUF_SIZE    (64U)
+#define UART_RX_BUF_NUM     (16U)
+#define UART_CNT            (10U)
 
 /***************************************************************************************************
  *                                          PUBLIC TYPES                                           *
@@ -50,11 +50,7 @@ bool bsp_uart_tx(const uint8_t _n, const uint8_t *const _data, const uint8_t _si
 
 void bsp_uart_tx_callback(const uint8_t _n, const bool _ok);
 
-bool bsp_uart_rx_callback(const uint8_t _n, const uint8_t *const _data, const uint8_t _size);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
+bool bsp_uart_rx_callback(uint8_t *const _data);
 
 /***************************************************************************************************
  *                                        END OF FILE

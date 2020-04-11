@@ -43,11 +43,18 @@
 /// Breakpoint
 #define BRK_PTR(msg) printf(ERR_STR msg "\r\n"); __asm__ volatile("bkpt #0")
 
-/// Debug printf
-#ifdef DEBUG
+/// Debug bsp printf
+#ifdef DEBUG_BSP
     #define BSP_PRINTF(args...) printf(args)
 #else
     #define BSP_PRINTF(args...)
+#endif
+
+/// Debug hub printf
+#ifdef DEBUG_HUB
+    #define HUB_PRINTF(args...) printf(args)
+#else
+    #define HUB_PRINTF(args...)
 #endif
 
 /***************************************************************************************************

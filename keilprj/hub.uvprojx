@@ -412,6 +412,11 @@
               <FileType>1</FileType>
               <FilePath>..\source\main\usr_io.c</FilePath>
             </File>
+            <File>
+              <FileName>hub.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\main\hub.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -830,6 +835,11 @@
               <FileName>usr_io.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\source\main\usr_io.c</FilePath>
+            </File>
+            <File>
+              <FileName>hub.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\source\main\hub.c</FilePath>
             </File>
           </Files>
         </Group>

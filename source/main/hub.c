@@ -8,11 +8,11 @@
  *   MCU Family:    STM32F
  *   Compiler:      ARMCC
  ***************************************************************************************************
- *   File:          main.c
+ *   File:          hub.c
  *   Description:
  *
  ***************************************************************************************************
- *   History:       13.04.2019 - file created
+ *   History:       2020/04/11 - file created
  *
  **************************************************************************************************/
 
@@ -22,12 +22,11 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#include "stm32f4xx_hal.h" // Device header
-#include "misc_macro.h"
-#include "bsp.h"
+
+#include "hub.h"
 #include "bsp_spi.h"
 #include "bsp_uart.h"
-#include "usr_io.h"
+#include "misc_macro.h"
 
 /***************************************************************************************************
  *                                       DEFINITIONS
@@ -45,6 +44,10 @@
  *                                       PRIVATE DATA
  **************************************************************************************************/
 
+bool spi_tx_complete_flag = true;
+bool uart_tx_complete_flag[UART_CNT] = 
+    {true, true, true, true, true, true, true, true, true, true};
+
 /***************************************************************************************************
  *                                       PUBLIC DATA
  **************************************************************************************************/
@@ -61,42 +64,82 @@
  *                                    PRIVATE FUNCTIONS
  **************************************************************************************************/
 
+static bool _crc_calc(uint8_t *const _data)
+{
+    // CRC-8/SAE-J1850
+    // width=8  poly=0x1d  init=0xff  refin=false  refout=false  xorout=0xff  check=0x4b
+    static const uint8_t poly   = 0x1d;
+    static const uint8_t xorout = 0xff;
+    uint8_t crc = 0xff;
+
+    uint8_t len = _data[1];
+
+    for (uint8_t i = 0; i < len; i++)
+    {
+        crc ^= _data[i]; 
+        
+        for (uint8_t j = 8; j > 0; --j)
+        {
+            crc = crc & (1 << 7) ? (crc << 1) ^ poly : crc << 1;
+        }
+    }
+
+    crc ^= xorout;
+    len--;
+
+    bool result = (_data[len] == crc);
+    
+    _data[len] = crc ^ xorout;
+    
+    return result;
+};
+
+/***************************************************************************************************
+ *                                    WEAKLY FUNCTIONS
+ **************************************************************************************************/
+
+void bsp_spi_tx_callback(const bool _ok)
+{
+    spi_tx_complete_flag = _ok;
+    
+    if (!_ok)
+    {
+        HUB_PRINTF("<hub> spi tx callback error!");
+    }
+}
+
+void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
+{
+    uart_tx_complete_flag[_n] = _ok;
+    
+    if (!_ok)
+    {
+        HUB_PRINTF("<hub> uart#%d tx callback error!", _n);
+    }
+}
+
+bool bsp_spi_rx_callback(uint8_t *const _data)
+{
+    
+}
+
+bool bsp_uart_rx_callback(uint8_t *const _data)
+{
+    _data[1]++;
+    
+    _crc_calc(_data);
+
+#warning add to spi tx
+    return true;
+}
+
 /***************************************************************************************************
  *                                    PUBLIC FUNCTIONS
  **************************************************************************************************/
 
-#if !defined(__CC_ARM) && defined(__ARMCC_VERSION) && !defined(__OPTIMIZE__)
-    /*
-    Without this directive, it does not start if -o0 optimization is used and the "main"
-    function without parameters.
-    see http://www.keil.com/support/man/docs/armclang_mig/armclang_mig_udb1499267612612.htm
-    */
-    __asm(".global __ARM_use_no_argv\n\t" "__ARM_use_no_argv:\n\t");
-#endif
-
-int main(void)
+void hub_routine(void)
 {
-    bsp_init();
 
-    printf("\033[31mC\033[32mO\033[33mL\033[34mO\033[35mR\033[42m \033[0m"
-            "\033[36mT\033[37mE\033[30m\033[47mS\033[0mT\r\n"); // Color test
-    usr_put_routine();
-
-    bsp_spi_init();
-    bsp_uart_init();
-
-    printf("Run..\r\n");
-    usr_put_routine();
-
-    for(;;)
-    {
-        usr_put_routine();
-        __WFI();
-    }
-
-    BRK_PTR("Main function terminated.");
-
-    return 0;
 }
 
 /***************************************************************************************************

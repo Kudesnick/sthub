@@ -1,11 +1,11 @@
 /**
  *  @file       bsp_spi.c
  *
- *  @brief      
+ *  @brief      hardware independent settings of SPI interface
  *
  *  @details
  *
- *  @author     Stulov Tikhon
+ *  @author     Stulov Tikhon (kudesnick@inbox.ru)
  *
  *  @date       2020/03/08
  */
@@ -28,15 +28,6 @@
 #define TX_PRI 2
 
 /**
- *  @brief      HW CRC control.
- *  @details    Default state is off because this unit contains error.
- *              See errata DocID029621 Rev 3 part 2.11.14.
- * url: https://www.st.com/content/ccc/resource/technical/document/errata_sheet/group0/23/53/dd/d9/63/af/4d/2c/DM00318678/files/DM00318678.pdf/jcr:content/translations/en.DM00318678.pdf
- */
-#ifndef CRCEN
-    #define CRCEN 0
-#endif
-/**
  *  @brief      Clear data register after transmit complete.
  *  @details    Data register not atomatic clear after transmit. And master receives last byte
  *              always. This setting has clear data register after ending of transmit. And master
@@ -44,9 +35,6 @@
  */
 #ifndef TXCLR
     #define TXCLR 1
-#endif
-#ifndef BUF_RX_LEN
-    #define BUF_RX_LEN 64
 #endif
 
 /***************************************************************************************************
@@ -57,7 +45,7 @@
  *                                           PRIVATE DATA
  **************************************************************************************************/
 
-uint8_t buf_rx[2][BUF_RX_LEN];
+uint8_t buf_rx[BUF_RX_CNT][BUF_RX_LEN];
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -75,62 +63,43 @@ uint8_t buf_rx[2][BUF_RX_LEN];
  *                                      PRIVATE FUNCTIONS
  **************************************************************************************************/
 
-static void DMA_RX_reload(void)
+static void _DMA_RX_reload(void)
 {
     SPI_DMA_RX->CR   &= ~DMA_SxCR_EN;
     while (SPI_DMA_RX->CR & DMA_SxCR_EN);
-#if (CRCEN != 0)
-    SPI_UNIT->RXCRCR  = 0;
-#endif
     SPI_DMA_RX->CR   |= DMA_SxCR_EN;
     BSP_PRINTF("<spi> DMA RX reload\r\n");
 }
 
-static void DMA_TX_reload(void)
+static void _DMA_TX_reload(void)
 {
     SPI_DMA_TX->CR   &= ~DMA_SxCR_EN;
     while (SPI_DMA_TX->CR & DMA_SxCR_EN);
-#if (CRCEN != 0)
-    SPI_UNIT->TXCRCR  = 0;
-#endif
     SPI_DMA_TX->CR   |= DMA_SxCR_EN;
     BSP_PRINTF("<spi> DMA TX reload\r\n");
 }
-    
+
+/***************************************************************************************************
+ *                                   INTERRUPTS HANDLERS
+ **************************************************************************************************/
+
 void EXTI4_IRQHandler(void)
 {
-    const uint16_t ntdr = SPI_DMA_RX->NDTR;
-#if (CRCEN != 0)
-    const uint8_t crc   = SPI_UNIT->RXCRCR;
-#endif
+    const uint16_t len = sizeof(buf_rx[0]) - SPI_DMA_RX->NDTR;
+
     // Switch RX buffer
     SPI_DMA_RX->CR &= ~DMA_SxCR_EN;
-#if (CRCEN != 0)
-    if (crc == 0)
+    SPI_DMA_RX->CR ^= DMA_SxCR_CT;
+    SPI_DMA_RX->CR |= DMA_SxCR_EN;
+
+#warning switch buffers and priority
+    if (len)
     {
-#endif
-        SPI_DMA_RX->CR ^= DMA_SxCR_CT;
-#if (CRCEN != 0)
+        const uint8_t buf_num = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? 0 : 1;
+        buf_rx[buf_num][1] = len;
+#warning switch buffer if return true
+        bsp_spi_rx_callback(buf_rx[buf_num]);
     }
-    SPI_UNIT->RXCRCR  = 0;
-#endif
-    SPI_DMA_RX->CR   |= DMA_SxCR_EN;
-    
-#if (CRCEN != 0)
-    if (crc == 0)
-    {
-#endif
-        if (sizeof(buf_rx[0]) > ntdr)
-        {
-            bsp_spi_rx_callback(buf_rx[(SPI_DMA_RX->CR & DMA_SxCR_CT) ? 0 : 1], sizeof(buf_rx[0]) - ntdr);
-        }
-#if (CRCEN != 0)
-    }
-    else
-    {
-        BSP_PRINTF("<spi> invalid RX CRC %#02x, data len: %d bytes\r\n", crc, sizeof(buf_rx[0]) - ntdr);
-    }
-#endif
     
     EXTI->PR = GPIO_EXTI_LINE(SPI_PIN_NSS);
 }
@@ -166,7 +135,7 @@ void DMA2_Stream2_IRQHandler(void)
         BSP_PRINTF("<spi>" ERR_STR "DMA RX irq unknown\r\n"); // Unknown event
     }
     
-    DMA_RX_reload();
+    _DMA_RX_reload();
 }
 
 // Tx
@@ -198,7 +167,7 @@ void DMA2_Stream3_IRQHandler(void)
         BSP_PRINTF("<spi>" ERR_STR "DMA TX irq unknown\r\n");
     }
     
-    DMA_TX_reload();
+    _DMA_TX_reload();
     bsp_spi_tx_callback(false);
 }
 
@@ -236,7 +205,7 @@ void SPI1_IRQHandler(void)
         BSP_PRINTF("<spi>" ERR_STR "DMA RX irq unknown\r\n");
     }
     
-    DMA_RX_reload();
+    _DMA_RX_reload();
 }
 
 /***************************************************************************************************
@@ -313,7 +282,7 @@ void bsp_spi_init(void)
     SPI_DMA_TX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
     SPI_UNIT->CR2    |= SPI_CR2_TXDMAEN;
 
-#if (0) // defined(DEBUG)
+#ifdef DEBUG_BSP
     // Test code
     {
         static const uint8_t data[] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A};
@@ -348,9 +317,9 @@ __WEAK void bsp_spi_tx_callback(const bool _ok)
     BSP_PRINTF("<spi> SPI TX complete callback. Result: %s\r\n", (_ok) ? "true" : "false");
 }
 
-__WEAK void bsp_spi_rx_callback(const uint8_t *const _data, const uint8_t _size)
+__WEAK bool bsp_spi_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<spi> SPI RX callback addr: %#08X, size: %d bytes\r\n", (uint32_t)_data, _size);
+    BSP_PRINTF("<spi> SPI RX callback addr: %#08X, size: %d bytes\r\n", (uint32_t)_data, _data[1]);
 }
 
 /**************************************************************************************************
