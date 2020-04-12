@@ -40,7 +40,7 @@
 
 void bsp_spi_init(void);
 
-bool bsp_spi_tx(const uint8_t *const _data, const uint8_t _size);
+bool bsp_spi_tx(const uint8_t *const _data);
 
 void bsp_spi_tx_callback(const bool _ok);
 

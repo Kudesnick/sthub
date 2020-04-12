@@ -27,6 +27,8 @@
 #include "bsp_spi.h"
 #include "bsp_uart.h"
 #include "misc_macro.h"
+#include "fifo.h"
+#include "bsp.h"
 
 /***************************************************************************************************
  *                                       DEFINITIONS
@@ -36,6 +38,14 @@
  *                                      PRIVATE TYPES
  **************************************************************************************************/
 
+typedef FIFO_TYPEDEF(uint8_t *, uint8_t, FIFO_SIZE_128) hub_fifo_t;
+
+typedef struct
+{
+    hub_fifo_t fifo;
+          bool not_ready;
+} hub_ch_t;
+
 /***************************************************************************************************
  *                               PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
@@ -44,9 +54,10 @@
  *                                       PRIVATE DATA
  **************************************************************************************************/
 
-bool spi_tx_complete_flag = true;
-bool uart_tx_complete_flag[UART_CNT] = 
-    {true, true, true, true, true, true, true, true, true, true};
+hub_ch_t ch_uart_tx[UART_CNT];
+hub_ch_t ch_uart_rx;
+hub_ch_t ch_spi_tx;
+hub_ch_t ch_spi_rx;
 
 /***************************************************************************************************
  *                                       PUBLIC DATA
@@ -72,7 +83,7 @@ static bool _crc_calc(uint8_t *const _data)
     static const uint8_t xorout = 0xff;
     uint8_t crc = 0xff;
 
-    uint8_t len = _data[1];
+    uint8_t len = _data[LEN_PTR];
 
     for (uint8_t i = 0; i < len; i++)
     {
@@ -100,7 +111,7 @@ static bool _crc_calc(uint8_t *const _data)
 
 void bsp_spi_tx_callback(const bool _ok)
 {
-    spi_tx_complete_flag = _ok;
+    ch_spi_tx.not_ready = !_ok;
     
     if (!_ok)
     {
@@ -110,7 +121,7 @@ void bsp_spi_tx_callback(const bool _ok)
 
 void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
 {
-    uart_tx_complete_flag[_n] = _ok;
+    ch_uart_tx[_n].not_ready = !_ok;
     
     if (!_ok)
     {
@@ -120,16 +131,29 @@ void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
 
 bool bsp_spi_rx_callback(uint8_t *const _data)
 {
+#warning exclude verification into routine
+    if (FIFO_IS_FULL(ch_uart_tx[_data[IFACE_NUM_PTR]].fifo))
+    {
+        HUB_PRINTF("<hub> spi rx callback error! Buffer i overflow.");
+        return false;
+    }
     
+    _data[LEN_PTR]--;
+    FIFO_ADD(ch_uart_tx[_data[IFACE_NUM_PTR]].fifo, _data);
+    
+    return true;
 }
 
 bool bsp_uart_rx_callback(uint8_t *const _data)
 {
-    _data[1]++;
-    
-    _crc_calc(_data);
+    if (FIFO_IS_FULL(ch_uart_rx.fifo))
+    {
+        HUB_PRINTF("<hub> uart#%d rx callback error! Buffer is overflow.", _data[IFACE_NUM_PTR]);
+        return false;
+    }
 
-#warning add to spi tx
+    FIFO_ADD(ch_uart_rx.fifo, _data);
+
     return true;
 }
 
@@ -139,7 +163,74 @@ bool bsp_uart_rx_callback(uint8_t *const _data)
 
 void hub_routine(void)
 {
-
+    // uart rx route
+    if (true
+        && !FIFO_IS_EMPTY(ch_uart_rx.fifo)
+        && !FIFO_IS_FULL(ch_spi_tx.fifo)
+       )
+    {
+        uint8_t *head = FIFO_EXTRACT(ch_uart_rx.fifo);
+        head[LEN_PTR]++;
+        _crc_calc(head);
+        FIFO_ADD(ch_spi_tx.fifo, head);
+    }
+    
+    // uart tx route
+    for (uint8_t i = 0; i < UART_CNT; i++)
+    {
+        if (true
+            && !ch_uart_tx[i].not_ready
+            && !FIFO_IS_EMPTY(ch_uart_tx[i].fifo)
+           )
+        {
+            uint8_t *head = FIFO_EXTRACT(ch_uart_tx[i].fifo);
+            if (!bsp_uart_tx(head))
+            {
+                FIFO_ADD(ch_uart_tx[i].fifo, head);
+            }
+        }
+    }
+    
+    // spi rx route
+    if (!FIFO_IS_EMPTY(ch_spi_rx.fifo))
+    {
+        uint8_t *head = FIFO_EXTRACT(ch_spi_rx.fifo);
+        
+        if (!_crc_calc(head))
+        {
+            HUB_PRINTF("<hub> spi rx CRC error!");
+        }
+        
+        else if (head[IFACE_NUM_PTR] >= UART_CNT)
+        {
+            HUB_PRINTF("<hub> spi rx UART number error!");
+        }
+        
+        else if (FIFO_IS_FULL(ch_uart_tx[head[IFACE_NUM_PTR]].fifo))
+        {
+            FIFO_ADD(ch_spi_rx.fifo, head);
+            HUB_PRINTF("<hub> uart#%d tx buffer overflow", head[IFACE_NUM_PTR]);
+        }
+        
+        else
+        {
+            head[LEN_PTR]--;
+            FIFO_ADD(ch_uart_tx[head[IFACE_NUM_PTR]].fifo, head);
+        }
+    }
+    
+    // spi tx routine
+    if (true
+        && ch_spi_tx.not_ready
+        && !FIFO_IS_EMPTY(ch_spi_tx.fifo)
+       )
+    {
+        uint8_t *head = FIFO_EXTRACT(ch_spi_tx.fifo);
+        if (!bsp_spi_tx(head))
+        {
+            FIFO_ADD(ch_spi_tx.fifo, head);
+        }
+    }
 }
 
 /***************************************************************************************************

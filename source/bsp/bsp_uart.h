@@ -46,7 +46,7 @@
 
 void bsp_uart_init(void);
 
-bool bsp_uart_tx(const uint8_t _n, const uint8_t *const _data, const uint8_t _size);
+bool bsp_uart_tx(const uint8_t *const _data);
 
 void bsp_uart_tx_callback(const uint8_t _n, const bool _ok);
 

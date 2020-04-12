@@ -19,6 +19,7 @@
 #include "bsp_uart.h"
 #include "bsp_uart_config.h"
 #include "misc_macro.h"
+#include "bsp.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -257,7 +258,7 @@ static void _rx_callback(const uint8_t _n)
 {
     buf_t * buf_tmp = &buf[_n];
     
-    buf_tmp->data[buf_tmp->cnt][1] = buf_tmp->ptr;
+    buf_tmp->data[buf_tmp->cnt][LEN_PTR] = buf_tmp->ptr;
     if (bsp_uart_rx_callback(buf_tmp->data[buf_tmp->cnt]))
     {
         if (++buf_tmp->cnt >= countof(buf_tmp->data))
@@ -265,7 +266,7 @@ static void _rx_callback(const uint8_t _n)
             buf_tmp->cnt = 0;
         }
     }
-    buf_tmp->ptr = 2;
+    buf_tmp->ptr = DATA_PTR;
 }
 
 static __INLINE void _uart_irq_hdl(const uint8_t _n)
@@ -293,6 +294,10 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
             // received one byte
             buf_t *const buf_tmp = &buf[_n];
             buf_tmp->data[buf_tmp->cnt][buf_tmp->ptr++] = data;
+            if (buf_tmp->ptr >= (UART_RX_BUF_SIZE - 1))
+            {
+                buf_tmp->ptr = DATA_PTR;
+            }
             
             return;
         }
@@ -488,40 +493,42 @@ void bsp_uart_init(void)
         
         for (uint8_t j = 0; j < UART_RX_BUF_NUM; j++)
         {
-            buf[i].data[j][0] = i;
+            buf[i].data[j][IFACE_NUM_PTR] = i;
         }
-        buf[i].ptr = 2;
+        buf[i].ptr = DATA_PTR;
     }
     
 #ifdef DEBUG_BSP
-    static const uint8_t data[] = {0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
+    static const uint8_t data[] = {0x00, 0x07, 0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
     
     for (uint8_t i = 0; i < 5; i++)
     {
-        bsp_uart_tx(i, data, sizeof(data));
+        bsp_uart_tx(data);
     }
 #endif
 }
 
-bool bsp_uart_tx(const uint8_t _n, const uint8_t *const _data, const uint8_t _size)
+bool bsp_uart_tx(const uint8_t *const _data)
 {
+    const uint8_t iface_num = _data[IFACE_NUM_PTR];
+
     if (false
-        || uart[_n].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
-        || uart[_n].tx_dma->CR & DMA_SxCR_EN
+        || uart[iface_num].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
+        || uart[iface_num].tx_dma->CR & DMA_SxCR_EN
         )
     {
-        BSP_PRINTF("<uart#%d> bsp_uart_tx false\r\n", _n);
+        BSP_PRINTF("<uart#%d> bsp_uart_tx false\r\n", iface_num);
         return false;
     }
 
-    uart[_n].tx_dma->NDTR     = _size;
-    uart[_n].tx_dma->M0AR     = (uint32_t)_data;
-    DMA_IFCR(uart[_n].tx_dma) = DMA_IF_LS(uart[_n].tx_dma, 0x3FU);
-    uart[_n].tx_dma->CR      |= DMA_SxCR_EN;
+    uart[iface_num].tx_dma->NDTR     = _data[LEN_PTR] - DATA_PTR;
+    uart[iface_num].tx_dma->M0AR     = (uint32_t)(&_data[DATA_PTR]);
+    DMA_IFCR(uart[iface_num].tx_dma) = DMA_IF_LS(uart[iface_num].tx_dma, 0x3FU);
+    uart[iface_num].tx_dma->CR      |= DMA_SxCR_EN;
 
-    uart[_n].uart->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
-    SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
-    uart[_n].uart->CR1 |=  (USART_CR1_TE);
+    uart[iface_num].uart->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
+    SET_IRQ_PRI(_irq_num(uart[iface_num].uart), TX_PRI);
+    uart[iface_num].uart->CR1 |=  (USART_CR1_TE);
 
     BSP_PRINTF("<uart#%d> bsp_uart_tx true\r\n", _n);
     return true;
@@ -534,7 +541,7 @@ __WEAK void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
 
 __WEAK bool bsp_uart_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", data[0], (uint32_t)_data, data[1]);
+    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", _data[IFACE_PTR], (uint32_t)_data, data[LEN_PTR]);
     
     return true;
 }

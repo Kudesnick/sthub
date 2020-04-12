@@ -19,6 +19,7 @@
 #include "bsp_spi.h"
 #include "bsp_spi_config.h"
 #include "misc_macro.h"
+#include "bsp.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -46,6 +47,7 @@
  **************************************************************************************************/
 
 uint8_t buf_rx[BUF_RX_CNT][BUF_RX_LEN];
+uint8_t buf_cnt = 1;
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -91,17 +93,34 @@ void EXTI4_IRQHandler(void)
     SPI_DMA_RX->CR &= ~DMA_SxCR_EN;
     SPI_DMA_RX->CR ^= DMA_SxCR_CT;
     SPI_DMA_RX->CR |= DMA_SxCR_EN;
+    
+    SET_IRQ_PRI(GPIO_IRQ_CHANNEL(SPI_PIN_NSS), TX_PRI);
 
-#warning switch buffers and priority
     if (len)
     {
         const uint8_t buf_num = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? 0 : 1;
-        buf_rx[buf_num][1] = len;
-#warning switch buffer if return true
-        bsp_spi_rx_callback(buf_rx[buf_num]);
+        buf_rx[buf_num][LEN_PTR] = len;
+
+        if (bsp_spi_rx_callback(buf_rx[buf_num]))
+        {
+            if (buf_cnt++ > BUF_RX_CNT)
+            {
+                buf_cnt = 0;
+            }
+            if (buf_num)
+            {
+                SPI_DMA_RX->M0AR = (uint32_t)&buf_rx[buf_cnt];
+            }
+            else
+            {
+                SPI_DMA_RX->M1AR = (uint32_t)&buf_rx[buf_cnt];
+            }
+        }
     }
     
     EXTI->PR = GPIO_EXTI_LINE(SPI_PIN_NSS);
+    
+    SET_IRQ_PRI(GPIO_IRQ_CHANNEL(SPI_PIN_NSS), RX_PRI);
 }
 
 // Rx
@@ -179,7 +198,7 @@ void SPI1_IRQHandler(void)
         && SPI_UNIT->SR & SPI_SR_TXE
        )
     {
-        SPI_UNIT->DR = 0;
+        SPI_UNIT->DR = 0x55;
         SPI_UNIT->CR2 &= ~SPI_CR2_TXEIE;
         BSP_PRINTF("<spi> SPI irq flag: SPI_SR_TXE (TXCLR)\r\n");
         
@@ -244,10 +263,6 @@ void bsp_spi_init(void)
     __NOP(); __NOP(); __NOP(); __NOP();
     RCC->APB2RSTR &= ~RCC_APB2RSTR_SPI1RST;
     // MODE_SLAVE, CPOL0, CPHA0, MSB_LSB, DATA_8_BITS, Max speed
-#if (CRCEN != 0)
-    SPI_UNIT->CRCPR   = 0x07; // CRC-8
-    SPI_UNIT->CR1    |= SPI_CR1_CRCEN;
-#endif
     SPI_UNIT->CR2     = SPI_CR2_ERRIE;
     SPI_UNIT->CR1    |= SPI_CR1_SPE;
     
@@ -265,9 +280,6 @@ void bsp_spi_init(void)
     DMA2->LIFCR = 0x3FU << 0x10; // Clear all interrupt flags
     SPI_DMA_RX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
     SPI_DMA_RX->FCR  |= DMA_IT_FE;
-#if (CRCEN != 0)
-    SPI_UNIT->RXCRCR  = 0;
-#endif
     SPI_DMA_RX->CR   |= DMA_SxCR_EN; // Enable DMA
     SPI_UNIT->CR2    |= SPI_CR2_RXDMAEN;
     
@@ -285,14 +297,14 @@ void bsp_spi_init(void)
 #ifdef DEBUG_BSP
     // Test code
     {
-        static const uint8_t data[] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A};
+        static uint8_t data[] = {0x01, 0x0d, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0xa2};
         
-        bsp_spi_tx(data, sizeof(data));
+        bsp_spi_tx(data);
     }
 #endif
 }
 
-bool bsp_spi_tx(const uint8_t *const _data, const uint8_t _size)
+bool bsp_spi_tx(const uint8_t *const _data)
 {
     if (SPI_DMA_TX->CR & DMA_SxCR_EN)
     {
@@ -300,12 +312,9 @@ bool bsp_spi_tx(const uint8_t *const _data, const uint8_t _size)
         return false;
     }
     
-    SPI_DMA_TX->NDTR  = _size;
+    SPI_DMA_TX->NDTR  = _data[LEN_PTR];
     SPI_DMA_TX->M0AR  = (uint32_t)_data;
     DMA2->LIFCR = 0x3FU << 0x16; // Clear all interrupt flags
-#if (CRCEN != 0)
-    SPI_UNIT->TXCRCR  = 0;
-#endif
     SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
 
     BSP_PRINTF("<spi> bsp_spi_tx true\r\n");
@@ -319,7 +328,9 @@ __WEAK void bsp_spi_tx_callback(const bool _ok)
 
 __WEAK bool bsp_spi_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<spi> SPI RX callback addr: %#08X, size: %d bytes\r\n", (uint32_t)_data, _data[1]);
+    BSP_PRINTF("<spi> SPI RX callback addr: %#08X, size: %d bytes\r\n", (uint32_t)_data, _data[LEN_PTR]);
+    
+    return true;
 }
 
 /**************************************************************************************************
