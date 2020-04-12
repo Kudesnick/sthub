@@ -77,11 +77,11 @@ hub_ch_t ch_spi_rx;
 
 static bool _crc_calc(uint8_t *const _data)
 {
-    // CRC-8/SAE-J1850
-    // width=8  poly=0x1d  init=0xff  refin=false  refout=false  xorout=0xff  check=0x4b
-    static const uint8_t poly   = 0x1d;
-    static const uint8_t xorout = 0xff;
-    uint8_t crc = 0xff;
+    // CRC-8
+    // width=8  poly=0x07  init=0x00  refin=false  refout=false  xorout=0x00  check=0xf4
+    static const uint8_t poly   = 0x07;
+    static const uint8_t xorout = 0x00;
+    uint8_t crc = 0x00;
 
     uint8_t len = _data[LEN_PTR];
 
@@ -100,7 +100,7 @@ static bool _crc_calc(uint8_t *const _data)
 
     bool result = (_data[len] == crc);
     
-    _data[len] = crc ^ xorout;
+    _data[len] = crc;
     
     return result;
 };
