@@ -131,7 +131,6 @@ void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
 
 bool bsp_spi_rx_callback(uint8_t *const _data)
 {
-#warning exclude verification into routine
     if (FIFO_IS_FULL(ch_uart_tx[_data[IFACE_NUM_PTR]].fifo))
     {
         HUB_PRINTF("<hub> spi rx callback error! Buffer i overflow.");

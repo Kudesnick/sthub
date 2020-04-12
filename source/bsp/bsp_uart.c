@@ -499,10 +499,12 @@ void bsp_uart_init(void)
     }
     
 #ifdef DEBUG_BSP
-    static const uint8_t data[] = {0x00, 0x07, 0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
+    static uint8_t data[] = {0x00, 0x07, 0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
     
     for (uint8_t i = 0; i < 5; i++)
     {
+        data[0] = i;
+        
         bsp_uart_tx(data);
     }
 #endif
@@ -530,7 +532,7 @@ bool bsp_uart_tx(const uint8_t *const _data)
     SET_IRQ_PRI(_irq_num(uart[iface_num].uart), TX_PRI);
     uart[iface_num].uart->CR1 |=  (USART_CR1_TE);
 
-    BSP_PRINTF("<uart#%d> bsp_uart_tx true\r\n", _n);
+    BSP_PRINTF("<uart#%d> bsp_uart_tx true\r\n", _data[IFACE_NUM_PTR]);
     return true;
 }
 
@@ -541,7 +543,7 @@ __WEAK void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
 
 __WEAK bool bsp_uart_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", _data[IFACE_PTR], (uint32_t)_data, data[LEN_PTR]);
+    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", _data[IFACE_NUM_PTR], (uint32_t)_data, _data[LEN_PTR]);
     
     return true;
 }
