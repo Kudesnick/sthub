@@ -501,7 +501,7 @@ void bsp_uart_init(void)
 #ifdef DEBUG_BSP
     static uint8_t data[] = {0x00, 0x07, 0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
     
-    for (uint8_t i = 0; i < 5; i++)
+    for (volatile uint8_t i = 0; i < 10; i+=2)
     {
         data[0] = i;
         
