@@ -500,12 +500,24 @@ void bsp_uart_init(void)
     
 #ifdef DEBUG_BSP
     static uint8_t data[] = {0x00, 0x07, 0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
-    
+//                              |     |  \--------------------------|     |
+//  Interface number -----------/     |                             |     |
+//  Message len (with CRC) -----------/                             |     |
+//  Sending data ---------------------------------------------------/     |
+//  CRC ------------------------------------------------------------------/
+
     for (volatile uint8_t i = 0; i < 10; i+=2)
     {
-        data[0] = i;
+        data[IFACE_NUM_PTR] = i;
         
         bsp_uart_tx(data);
+    }
+    
+    for (volatile uint8_t i = 1; i < 10; i+=2)
+    {
+        data[IFACE_NUM_PTR] = i;
+        
+        while (!bsp_uart_tx(data));
     }
 #endif
 }
