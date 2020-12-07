@@ -22,6 +22,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "stm32f4xx_hal.h" // Device header
 #include "misc_macro.h"
 #include "bsp.h"
@@ -74,20 +75,23 @@
     __asm(".global __ARM_use_no_argv\n\t" "__ARM_use_no_argv:\n\t");
 #endif
 
+volatile const uint32_t v_tab[0x100] __attribute__((section("V_TAB_ADDR")));
+
 int main(void)
 {
-    /// @todo copy vectors table to RAM
+    memcpy((void *)v_tab, (const void *)(SCB->VTOR), sizeof(v_tab));
+    SCB->VTOR = (uint32_t)v_tab;
 
     bsp_init();
 
     printf("\033[31mC\033[32mO\033[33mL\033[34mO\033[35mR\033[42m \033[0m"
-            "\033[36mT\033[37mE\033[30m\033[47mS\033[0mT\r\n"); // Color test
+            "\033[36mT\033[37mE\033[30m\033[47mS\033[0mT\n"); // Color test
     usr_put_routine();
 
     bsp_spi_init();
     bsp_uart_init();
 
-    printf("Run..\r\n");
+    printf("Run\n");
     usr_put_routine();
 
     for(;;)

@@ -283,7 +283,7 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
     {
         if (sreg & USART_SR_ORE)
         {
-            BSP_PRINTF("<uart#%d> irq USART_SR_ORE\r\n", _n);
+            BSP_PRINTF("<U%d>irOR\r\n", _n);
         }
         if (sreg & USART_SR_RXNE)
         {
@@ -311,7 +311,7 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
         u->uart->CR1 &= ~USART_CR1_IDLEIE;
         
-        BSP_PRINTF("<uart#%d> irq USART_SR_IDLE\r\n", _n);
+        BSP_PRINTF("<U%d>irIDL\n", _n);
         
         // received all bytes
         _rx_callback(_n);
@@ -326,7 +326,7 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
        )
     {
         u->uart->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
-        BSP_PRINTF("<uart#%d> irq USART_SR_TXE\r\n", _n);
+        BSP_PRINTF("<U%d>irTX\n", _n);
         
         // TX complete
         bsp_uart_tx_callback(_n, true);
@@ -338,7 +338,7 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
     }
     if (!result)
     {
-        BSP_PRINTF("<uart#%d> irq unknown\r\n", _n);
+        BSP_PRINTF("<U%d>irU\n", _n);
     }
 }
 
@@ -349,21 +349,21 @@ static void _uart_dma_tx_irq_hndl(const bsp_uart_unit_t *const _u)
     {
         DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_TCIF); 
         _u->uart->CR1 |= USART_CR1_TCIE;
-        BSP_PRINTF("<uart> DMA TX irq DMA_FLAG_TCIF\r\n");
+        BSP_PRINTF("<U>dmaTC\n");
     }
     else if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_DMEIF))
     {
         DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_DMEIF);
-        BSP_PRINTF("<uart>" ERR_STR "DMA TX irq DMA_FLAG_DMEIF\r\n");
+        BSP_PRINTF("<U>" ERR_STR "dmaDME\n");
     }
     else if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_TEIF))
     {
         DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_TEIF);
-        BSP_PRINTF("<uart>" ERR_STR "DMA TX irq DMA_FLAG_TEIF\r\n");
+        BSP_PRINTF("<U>" ERR_STR "dmaTE\n");
     }
     else
     {
-        BSP_PRINTF("<uart>" ERR_STR "DMA TX irq unknown\r\n");
+        BSP_PRINTF("<U>" ERR_STR "dmaU\n");
     }
 }
 
@@ -531,7 +531,7 @@ bool bsp_uart_tx(const uint8_t *const _data)
         || uart[iface_num].tx_dma->CR & DMA_SxCR_EN
         )
     {
-        BSP_PRINTF("<uart#%d> bsp_uart_tx false\r\n", iface_num);
+        BSP_PRINTF("<U%d>txF\n", iface_num);
         return false;
     }
 
@@ -544,18 +544,18 @@ bool bsp_uart_tx(const uint8_t *const _data)
     SET_IRQ_PRI(_irq_num(uart[iface_num].uart), TX_PRI);
     uart[iface_num].uart->CR1 |=  (USART_CR1_TE);
 
-    BSP_PRINTF("<uart#%d> bsp_uart_tx true\r\n", _data[IFACE_NUM_PTR]);
+    BSP_PRINTF("<U%d>txT\n", _data[IFACE_NUM_PTR]);
     return true;
 }
 
 __WEAK void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
 {
-    BSP_PRINTF("<uart#%d> UART TX complete callback. Result: %s\r\n", _n, (_ok) ? "true" : "false");
+    BSP_PRINTF("<U%d>txkb%s\n", _n, (_ok) ? "T" : "F");
 }
 
 __WEAK bool bsp_uart_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", _data[IFACE_NUM_PTR], (uint32_t)_data, _data[LEN_PTR]);
+    BSP_PRINTF("<U%d>rxkb%#08X %d\n", _data[IFACE_NUM_PTR], (uint32_t)_data, _data[LEN_PTR]);
     
     return true;
 }

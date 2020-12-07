@@ -38,10 +38,10 @@
     #define countof(arr) (sizeof(arr)/sizeof(arr[0]))
 #endif
 
-#define ERR_STR " \033[31mError.\033[0m "
+#define ERR_STR "Er "
 
 /// Breakpoint
-#define BRK_PTR(msg) printf(ERR_STR msg "\r\n"); __asm__ volatile("bkpt #0")
+#define BRK_PTR(msg) printf(ERR_STR msg "\n"); __asm__ volatile("bkpt #0")
 
 /// Debug bsp printf
 #ifdef DEBUG_BSP
