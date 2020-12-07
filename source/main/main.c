@@ -76,6 +76,8 @@
 
 int main(void)
 {
+    /// @todo copy vectors table to RAM
+
     bsp_init();
 
     printf("\033[31mC\033[32mO\033[33mL\033[34mO\033[35mR\033[42m \033[0m"
