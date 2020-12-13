@@ -292,7 +292,7 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         {
             u->uart->CR1 |= USART_CR1_IDLEIE;
             // not use printf for speed optimization 
-            // BSP_PRINTF("<uart#%d> irq USART_SR_RXNE\r\n", _n);
+            // BSP_PRINTF("<u%d>RXNE\n", _n);
 
             // received one byte
             buf_t *const buf_tmp = buf[_n];
@@ -521,6 +521,10 @@ void bsp_uart_init(void)
     {
         while (!bsp_uart_tx(i));
     }
+
+    /* This delay is necessary because no byte receive interrupts have yet occurred at the start
+    of the cycle. Because of this, transmission begins on a line that is already receiving data. */
+    for (volatile uint16_t i = 0xFFF; i > 0; i--){};
     
     for (volatile uint8_t i = 0; i < UART_CNT; i+=2)
     {
