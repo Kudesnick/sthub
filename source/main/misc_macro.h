@@ -38,7 +38,7 @@
     #define countof(arr) (sizeof(arr)/sizeof(arr[0]))
 #endif
 
-#define ERR_STR "Er "
+#define ERR_STR "ERR "
 
 /// Breakpoint
 #define BRK_PTR(msg) printf(ERR_STR msg "\n"); __asm__ volatile("bkpt #0")

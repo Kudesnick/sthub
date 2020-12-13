@@ -80,11 +80,8 @@
 typedef uint32_t v_tab_item_t;
 volatile const v_tab_item_t v_tab[V_TAB_SIZE] __attribute__((section("V_TAB_ADDR")));
 
-int main(int argument_count, char **argument_array)
+int main(void)
 {
-    (void)argument_count;
-    (void)argument_array;
-
     for (volatile uint16_t i = 0; i < sizeof(v_tab)/sizeof(v_tab[0]); i++)
     {
         volatile v_tab_item_t *const v_tab_ram = (v_tab_item_t *)v_tab;
@@ -104,7 +101,6 @@ int main(int argument_count, char **argument_array)
     bsp_uart_init();
 
     printf("Run\n");
-    usr_put_routine();
 
     for(;;)
     {

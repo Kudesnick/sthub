@@ -39,6 +39,11 @@
     #define ITM_TCR_ITMENA_Msk    (1UL << 0)
 #endif
 
+#define countof(_a) (sizeof(_a)/sizeof((_a)[0]))
+#define FIFO_ADD(_q, _value) ((_q).data[(_q).end_idx++ & (countof((_q).data) - 1)] = (_value))
+#define FIFO_IS_EMPTY(_q) ((_q).end_idx == (_q).begin_idx)
+#define FIFO_EXTRACT(_q) ((_q).data[(_q).begin_idx++ & (countof((_q).data) - 1)])
+
 /***************************************************************************************************
  *                                      PRIVATE TYPES
  **************************************************************************************************/
@@ -47,7 +52,12 @@
  *                                      PRIVATE DATA
  **************************************************************************************************/
 
-FIFO_TYPEDEF(uint8_t, uint16_t, FIFO_SIZE_2048) io_buf;
+struct io_queue_t
+{
+    volatile uint16_t begin_idx;
+    volatile uint16_t end_idx;
+    uint8_t data[2048];
+} io_queue;
 
 /***************************************************************************************************
  *                                     PRIVATE FUNCTIONS
@@ -66,7 +76,7 @@ FIFO_TYPEDEF(uint8_t, uint16_t, FIFO_SIZE_2048) io_buf;
 int usr_put_char(int ch)
 {
     __disable_irq();
-    FIFO_ADD(io_buf, ch);
+    FIFO_ADD(io_queue, ch);
     __enable_irq();
     
     return ch;
@@ -160,9 +170,9 @@ void usr_put_routine(void)
 
 void usr_put_routine(void)
 {
-    while (!FIFO_IS_EMPTY(io_buf))
+    while (!FIFO_IS_EMPTY(io_queue))
     {
-        const uint8_t ch = FIFO_EXTRACT(io_buf);
+        const uint8_t ch = FIFO_EXTRACT(io_queue);
     
         if ((ITM_TCR & ITM_TCR_ITMENA_Msk) && /* ITM enabled */
             (ITM_TER & (1UL << 0)))           /* ITM Port #0 enabled */

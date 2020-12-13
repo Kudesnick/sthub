@@ -70,7 +70,7 @@ static void _DMA_RX_reload(void)
     SPI_DMA_RX->CR   &= ~DMA_SxCR_EN;
     while (SPI_DMA_RX->CR & DMA_SxCR_EN);
     SPI_DMA_RX->CR   |= DMA_SxCR_EN;
-    BSP_PRINTF("<spi> DMA RX reload\r\n");
+    BSP_PRINTF("<s>RXr\n");
 }
 
 static void _DMA_TX_reload(void)
@@ -78,7 +78,7 @@ static void _DMA_TX_reload(void)
     SPI_DMA_TX->CR   &= ~DMA_SxCR_EN;
     while (SPI_DMA_TX->CR & DMA_SxCR_EN);
     SPI_DMA_TX->CR   |= DMA_SxCR_EN;
-    BSP_PRINTF("<spi> DMA TX reload\r\n");
+    BSP_PRINTF("<s>TXr\n");
 }
 
 /***************************************************************************************************
@@ -130,28 +130,28 @@ void DMA2_Stream2_IRQHandler(void)
     {
         // Called from EXTI interrupt, when switching RX buffer or when buffer is full
         DMA2->LIFCR |= DMA_FLAG_TCIF2_6;
-        BSP_PRINTF("<spi> DMA RX irq DMA_FLAG_TCIF\r\n");
+        BSP_PRINTF("<s>rxTC\n");
         
         return;
     }
     else if (DMA2->LISR & DMA_FLAG_DMEIF2_6)
     {
         DMA2->LIFCR |= DMA_FLAG_DMEIF2_6;
-        BSP_PRINTF("<spi>" ERR_STR "DMA RX irq DMA_FLAG_DMEIF\r\n"); // Direct mode error
+        BSP_PRINTF("<s>" ERR_STR "rxDME\n"); // Direct mode error
     }
     else if (DMA2->LISR & DMA_FLAG_FEIF2_6)
     {
         DMA2->LIFCR |= DMA_FLAG_FEIF2_6;
-        BSP_PRINTF("<spi>" ERR_STR "DMA RX irq DMA_FLAG_FEIF\r\n"); // FIFO overrun/underrun
+        BSP_PRINTF("<s>" ERR_STR "rxFE\n"); // FIFO overrun/underrun
     }
     else if (DMA2->LISR & DMA_FLAG_TEIF2_6)
     {
         DMA2->LIFCR |= DMA_FLAG_TEIF2_6;
-        BSP_PRINTF("<spi>" ERR_STR "DMA RX irq DMA_FLAG_TEIF\r\n"); // Transfer error
+        BSP_PRINTF("<s>" ERR_STR "rxTE\n"); // Transfer error
     }
     else
     {
-        BSP_PRINTF("<spi>" ERR_STR "DMA RX irq unknown\r\n"); // Unknown event
+        BSP_PRINTF("<s>" ERR_STR "rx unknwn\n"); // Unknown event
     }
     
     _DMA_RX_reload();
@@ -166,7 +166,7 @@ void DMA2_Stream3_IRQHandler(void)
 #if (TXCLR != 0)
         SPI_UNIT->CR2 |= SPI_CR2_TXEIE;
 #endif   
-        BSP_PRINTF("<spi> DMA TX irq DMA_FLAG_TCIF\r\n");
+        BSP_PRINTF("<s>txTC\n");
 
         bsp_spi_tx_callback(true);
         return;
@@ -174,16 +174,16 @@ void DMA2_Stream3_IRQHandler(void)
     else if (DMA2->LISR & DMA_FLAG_DMEIF3_7)
     {
         DMA2->LIFCR |= DMA_FLAG_DMEIF3_7;
-        BSP_PRINTF("<spi>" ERR_STR "DMA TX irq DMA_FLAG_DMEIF\r\n");
+        BSP_PRINTF("<s>" ERR_STR "txDM\n");
     }
     else if (DMA2->LISR & DMA_FLAG_TEIF3_7)
     {
         DMA2->LIFCR |= DMA_FLAG_TEIF3_7;
-        BSP_PRINTF("<spi>" ERR_STR "DMA TX irq DMA_FLAG_TEIF\r\n");
+        BSP_PRINTF("<>" ERR_STR "txT\n");
     }
     else
     {
-        BSP_PRINTF("<spi>" ERR_STR "DMA TX irq unknown\r\n");
+        BSP_PRINTF("<s>" ERR_STR "tx unknwn\n");
     }
     
     _DMA_TX_reload();
@@ -200,7 +200,7 @@ void SPI1_IRQHandler(void)
     {
         SPI_UNIT->DR = 0x55;
         SPI_UNIT->CR2 &= ~SPI_CR2_TXEIE;
-        BSP_PRINTF("<spi> SPI irq flag: SPI_SR_TXE (TXCLR)\r\n");
+        BSP_PRINTF("<s>TXCLR\n");
         
         return;
     }
@@ -208,7 +208,7 @@ void SPI1_IRQHandler(void)
     if (SPI_UNIT->SR & SPI_SR_CRCERR)
     {
         SPI_UNIT->SR &= ~SPI_SR_CRCERR;
-        BSP_PRINTF("<spi> SPI irq flag: SPI_SR_CRCERR\r\n");
+        BSP_PRINTF("<s>CRCERR\n");
     }
     else if (SPI_UNIT->SR & SPI_SR_OVR)
     {
@@ -217,11 +217,11 @@ void SPI1_IRQHandler(void)
             volatile uint16_t reg = SPI_UNIT->DR;
         }
         while (SPI_UNIT->SR & SPI_SR_OVR);
-        BSP_PRINTF("<spi>" ERR_STR "SPI irq flag: SPI_SR_OVR\r\n");
+        BSP_PRINTF("<s>" ERR_STR "OVR\n");
     }
     else
     {
-        BSP_PRINTF("<spi>" ERR_STR "DMA RX irq unknown\r\n");
+        BSP_PRINTF("<s>" ERR_STR "irq unknwn\n");
     }
     
     _DMA_RX_reload();
@@ -308,7 +308,7 @@ bool bsp_spi_tx(const uint8_t *const _data)
 {
     if (SPI_DMA_TX->CR & DMA_SxCR_EN)
     {
-        BSP_PRINTF("<spi> bsp_spi_tx false\r\n");
+        BSP_PRINTF("<s>txF\n");
         return false;
     }
     
@@ -317,18 +317,18 @@ bool bsp_spi_tx(const uint8_t *const _data)
     DMA2->LIFCR = 0x3FU << 0x16; // Clear all interrupt flags
     SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
 
-    BSP_PRINTF("<spi> bsp_spi_tx true\r\n");
+    BSP_PRINTF("<s>txT\n");
     return true;
 }
 
 __WEAK void bsp_spi_tx_callback(const bool _ok)
 {
-    BSP_PRINTF("<spi> SPI TX complete callback. Result: %s\r\n", (_ok) ? "true" : "false");
+    BSP_PRINTF("<s> SPI TX complete callback. Result: %s\n", (_ok) ? "T" : "F");
 }
 
 __WEAK bool bsp_spi_rx_callback(uint8_t *const _data)
 {
-    BSP_PRINTF("<spi> SPI RX callback addr: %#08X, size: %d bytes\r\n", (uint32_t)_data, _data[LEN_PTR]);
+    BSP_PRINTF("<s> SPI RX callback addr: %#08X, size: %d bytes\n", (uint32_t)_data, _data[LEN_PTR]);
     
     return true;
 }

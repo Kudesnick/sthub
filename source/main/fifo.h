@@ -35,73 +35,48 @@
  *                                         INCLUDED FILES
  **************************************************************************************************/
 
+#include "RTE_Components.h"
+#include CMSIS_device_header
+
 /***************************************************************************************************
  *                                           DEFINITIONS                                           *
  **************************************************************************************************/
 
-#ifndef countof
-    #define countof(a) (sizeof(a)/sizeof((a)[0]))
-#endif
-
-#define FIFO_COUNTOF(queue)                 (sizeof((queue).data)/sizeof(*((queue).data)))
-
-#define FIFO_LEN_GET(queue)                 \
-    ((uint32_t)((queue).end_idx - (queue).begin_idx))
-#define FIFO_ADD(queue, value)              \
-    ((queue).data[(queue).end_idx++ & (countof((queue).data) - 1)] = (value))
-#define FIFO_WRITE_ITEM(queue, item, value) \
-    ((queue).data[(((queue).begin_idx) + (item)) & (countof((queue).data) - 1)] = (value))
-#define FIFO_EXTRACT(queue)                 \
-    ((queue).data[(queue).begin_idx++ & (countof((queue).data) - 1)])
-#define FIFO_READ_HEAD(queue)               \
-    ((queue).data[(queue).begin_idx & (countof((queue).data) - 1)])
-#define FIFO_READ_ITEM(queue, item)         \
-    ((queue).data[(((queue).begin_idx) + (item)) & (countof((queue).data) - 1)])
-#define FIFO_CLEAR(queue)                   \
-    ((queue).end_idx = (queue).begin_idx)
-#define FIFO_IS_EMPTY(queue)                \
-    ((queue).end_idx == (queue).begin_idx)
-#define FIFO_IS_FULL(queue)                 \
-    (FIFO_LEN_GET(queue) >= countof((queue).data))
+#define BUF_CNT  32
+#define BUF_SIZE 32
 
 /***************************************************************************************************
  *                                          PUBLIC TYPES                                           *
  **************************************************************************************************/
 
+typedef __PACKED_STRUCT
+{
+    __PACKED_UNION
+    {
+        __PACKED_STRUCT
+        {
+            uint8_t state  : 4;
+            uint8_t channel: 4;
+        };
+        uint8_t free_status;
+    };
+    uint8_t len;
+} buf_hdr_t;
+
+typedef __PACKED_STRUCT
+{
+    buf_hdr_t head;
+    uint8_t data[BUF_SIZE - sizeof(buf_hdr_t)];
+} buf_t;
+
 typedef enum
 {
-    FIFO_SIZE_2     = (1U <<  1),
-    FIFO_SIZE_4     = (1U <<  2),
-    FIFO_SIZE_8     = (1U <<  3),
-    FIFO_SIZE_16    = (1U <<  4),
-    FIFO_SIZE_32    = (1U <<  5),
-    FIFO_SIZE_64    = (1U <<  6),
-    FIFO_SIZE_128   = (1U <<  7),
-    FIFO_SIZE_256   = (1U <<  8),
-    FIFO_SIZE_512   = (1U <<  9),
-    FIFO_SIZE_1024  = (1U << 10),
-    FIFO_SIZE_2048  = (1U << 11),
-    FIFO_SIZE_4096  = (1U << 12),
-    FIFO_SIZE_8192  = (1U << 13),
-    FIFO_SIZE_16364 = (1U << 14),
-    FIFO_SIZE_32768 = (1U << 15),
-} fifo_size_t;
-
-// Rounding to binary exponent
-#define FIFO_SIZE_CEIL(SIZE)                                                                     \
-    ((SIZE -   1 | SIZE >>  1 | SIZE >>  2 | SIZE >>  3 | SIZE >>  4 | SIZE >>  5 | SIZE >>  6 | \
-      SIZE >>  7 | SIZE >>  8 | SIZE >>  9 | SIZE >> 10 | SIZE >> 11 | SIZE >> 12 | SIZE >> 13 | \
-      SIZE >> 14 | SIZE >> 15 | SIZE >> 16 | SIZE >> 17 | SIZE >> 18 | SIZE >> 19 | SIZE >> 20 | \
-      SIZE >> 21 | SIZE >> 22 | SIZE >> 23 | SIZE >> 24 | SIZE >> 25 | SIZE >> 26 | SIZE >> 27 | \
-      SIZE >> 28 | SIZE >> 29 | SIZE >> 30 | SIZE >> 31 ) + 1)
-
-#define FIFO_TYPEDEF(data_t, count_t, SIZE)\
-    struct                                 \
-    {                                      \
-        volatile count_t                   \
-        begin_idx, end_idx;                \
-        data_t data[FIFO_SIZE_CEIL(SIZE)]; \
-    }
+    BUF_FREE = 0,
+    BUF_HOST_RX_WAIT,
+    BUF_HOST_TX_WAIT,
+    BUF_SLAVE_RX_WAIT,
+    BUF_SLAVE_TX_WAIT,
+} buf_state_t;
 
 /***************************************************************************************************
  *                                         GLOBAL VARIABLES                                        *
@@ -110,3 +85,7 @@ typedef enum
 /***************************************************************************************************
  *                                    PUBLIC FUNCTION PROTOTYPES                                   *
  **************************************************************************************************/
+
+buf_t *const buf_catch(const buf_state_t _state);
+buf_t *const buf_get(const buf_state_t _state);
+void buf_free(buf_t *const _buf);
