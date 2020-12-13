@@ -322,6 +322,25 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         
         return;
     }
+    
+    if (true
+        && u->uart->CR1 & USART_CR1_TCIE
+        && sreg & USART_SR_TC
+       )
+    {
+        // TX complete
+        u->uart->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
+        BSP_PRINTF("<U%d>irTX\n", _n);
+
+        buf_t *const buf_tmp = (buf_t *)(u->tx_dma->M0AR - sizeof(buf_hdr_t));
+        buf_free(buf_tmp);
+
+        u->uart->CR1 |=  USART_CR1_RE;
+        SET_IRQ_PRI(_irq_num(uart[_n].uart), RX_PRI);
+        
+        return;
+    }
+    
     if (!result)
     {
         BSP_PRINTF("<U%d>irU\n", _n);
@@ -336,14 +355,8 @@ static void _uart_dma_tx_irq_hndl(const uint8_t _n)
     if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_TCIF))
     {
         DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_TCIF); 
-        u->uart->CR1 &= ~USART_CR1_TCIE;
-        SET_IRQ_PRI(_irq_num(u->uart), RX_PRI);
-        u->uart->CR1 |=  USART_CR1_RE;
+        u->uart->CR1 |= USART_CR1_TCIE;
         BSP_PRINTF("<U%d>dmaTC\n", _n);
-        
-        // TX complete
-        buf_t *const buf_tmp = (buf_t *)(u->tx_dma->M0AR - sizeof(buf_hdr_t));
-        buf_free(buf_tmp);
     }
     else if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_DMEIF))
     {
@@ -490,7 +503,7 @@ void bsp_uart_init(void)
     }
     
 #ifdef DEBUG_BSP
-    for (volatile uint8_t i = 0; i < 10; i++)
+    for (volatile uint8_t i = 0; i < UART_CNT; i++)
     {
         buf_t *const buf_tmp = buf_catch(BUF_UART_TX_WAIT);
         buf_tmp->head.channel = i;
