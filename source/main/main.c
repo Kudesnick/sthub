@@ -80,7 +80,7 @@
 typedef uint32_t v_tab_item_t;
 volatile const v_tab_item_t v_tab[V_TAB_SIZE] __attribute__((section("V_TAB_ADDR")));
 
-int main(void)
+static void _relocate_vector_table(void)
 {
     for (volatile uint16_t i = 0; i < sizeof(v_tab)/sizeof(v_tab[0]); i++)
     {
@@ -90,6 +90,11 @@ int main(void)
         v_tab_ram[i] = v_tab_rom[i];
     }
     SCB->VTOR = (uint32_t)v_tab;
+}
+
+int main(void)
+{
+    _relocate_vector_table();
 
     bsp_init();
 

@@ -28,8 +28,6 @@
  *                                           DEFINITIONS                                           *
  **************************************************************************************************/
 
-#define UART_RX_BUF_SIZE    (64U)
-#define UART_RX_BUF_NUM     (16U)
 #define UART_CNT            (10U)
 
 /***************************************************************************************************
@@ -45,12 +43,7 @@
  **************************************************************************************************/
 
 void bsp_uart_init(void);
-
-bool bsp_uart_tx(const uint8_t *const _data);
-
-void bsp_uart_tx_callback(const uint8_t _n, const bool _ok);
-
-bool bsp_uart_rx_callback(uint8_t *const _data);
+bool bsp_uart_tx(const uint8_t _n);
 
 /***************************************************************************************************
  *                                        END OF FILE

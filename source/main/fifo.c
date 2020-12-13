@@ -23,6 +23,7 @@
 #include "fifo.h"
 
 #include <stdlib.h>
+#include <stdbool.h>
 
 /***************************************************************************************************
  *                                       DEFINITIONS
@@ -40,7 +41,7 @@
  *                                       PRIVATE DATA
  **************************************************************************************************/
 
-static buf_t buf_arr[BUF_CNT];
+buf_t buf_arr[BUF_CNT];
 
 /***************************************************************************************************
  *                                       PUBLIC DATA
@@ -96,6 +97,24 @@ buf_t *const buf_get(const buf_state_t _state)
         buf_t *const result = &buf_arr[i];
         
         if (result->head.state == _state)
+        {
+            return result;
+        }
+    }
+
+    return NULL;
+}
+
+buf_t *const buf_get_ch(const buf_state_t _state, const uint8_t _ch)
+{
+    for (int8_t i = BUF_CNT - 1; i >= 0; i--)
+    {
+        buf_t *const result = &buf_arr[i];
+        
+        if (true
+            && result->head.state == _state
+            && result->head.channel == _ch
+           )
         {
             return result;
         }

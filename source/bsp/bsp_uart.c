@@ -20,6 +20,7 @@
 #include "bsp_uart_config.h"
 #include "misc_macro.h"
 #include "bsp.h"
+#include "fifo.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -62,13 +63,6 @@ typedef struct
     DMA_Stream_TypeDef *tx_dma;
     uint8_t            tx_dma_ch;
 } bsp_uart_unit_t;
-
-typedef struct
-{
-    uint8_t ptr;
-    uint8_t cnt;
-    uint8_t data[UART_RX_BUF_NUM][UART_RX_BUF_SIZE];
-} buf_t;
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
@@ -148,7 +142,7 @@ const bsp_uart_unit_t uart[UART_CNT] =
     },
 };
 
-buf_t buf[UART_CNT];
+buf_t *buf[UART_CNT];
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -256,17 +250,24 @@ static __INLINE void _rcc_reset(const void *const _u)
 
 static void _rx_callback(const uint8_t _n)
 {
-    buf_t * buf_tmp = &buf[_n];
-    
-    buf_tmp->data[buf_tmp->cnt][LEN_PTR] = buf_tmp->ptr;
-    if (bsp_uart_rx_callback(buf_tmp->data[buf_tmp->cnt]))
+    for (;;)
     {
-        if (++buf_tmp->cnt >= countof(buf_tmp->data))
+        buf_t *const buf_tmp = buf_catch(BUF_UART_RX_WAIT);
+        
+        if (buf_tmp == NULL)
         {
-            buf_tmp->cnt = 0;
+            BSP_PRINTF("<U>" ERR_STR "Buf OVF\n");
+        }
+        else
+        {
+            buf_tmp->head.channel = _n;
+            buf_tmp->head.len = 0;
+            buf[_n]->head.state = BUF_HOST_TX_WAIT;
+            buf[_n] = buf_tmp;
+            
+            return;
         }
     }
-    buf_tmp->ptr = DATA_PTR;
 }
 
 static __INLINE void _uart_irq_hdl(const uint8_t _n)
@@ -292,11 +293,12 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
             // BSP_PRINTF("<uart#%d> irq USART_SR_RXNE\r\n", _n);
 
             // received one byte
-            buf_t *const buf_tmp = &buf[_n];
-            buf_tmp->data[buf_tmp->cnt][buf_tmp->ptr++] = data;
-            if (buf_tmp->ptr >= (UART_RX_BUF_SIZE - 1))
+            buf_t *const buf_tmp = buf[_n];
+            buf_tmp->data[buf_tmp->head.len++] = data;
+            
+            if (buf_tmp->head.len >= (sizeof(buf_tmp->data)))
             {
-                buf_tmp->ptr = DATA_PTR;
+                _rx_callback(_n);
             }
             
             return;
@@ -325,12 +327,10 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         && sreg & USART_SR_TC
        )
     {
+        // TX complete
         u->uart->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
         BSP_PRINTF("<U%d>irTX\n", _n);
-        
-        // TX complete
-        bsp_uart_tx_callback(_n, true);
-        
+                
         u->uart->CR1 |=  USART_CR1_RE;
         SET_IRQ_PRI(_irq_num(uart[_n].uart), RX_PRI);
         
@@ -490,73 +490,52 @@ void bsp_uart_init(void)
     for (uint8_t i = 0; i < UART_CNT; i++)
     {
         _uart_init(i);
-        
-        for (uint8_t j = 0; j < UART_RX_BUF_NUM; j++)
-        {
-            buf[i].data[j][IFACE_NUM_PTR] = i;
-        }
-        buf[i].ptr = DATA_PTR;
+        buf[i] = buf_catch(BUF_UART_RX_WAIT);
+        buf[i]->head.channel = i;
+        buf[i]->head.len = 0;
     }
     
 #ifdef DEBUG_BSP
-    static uint8_t data[] = {0x00, 0x07, 0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
-//                              |     |  \--------------------------|     |
-//  Interface number -----------/     |                             |     |
-//  Message len (with CRC) -----------/                             |     |
-//  Sending data ---------------------------------------------------/     |
-//  CRC ------------------------------------------------------------------/
-
-    for (volatile uint8_t i = 0; i < 10; i+=2)
+    for (volatile uint8_t i = 0; i < 10; i++)
     {
-        data[IFACE_NUM_PTR] = i;
+        buf_t *const buf_tmp = buf_catch(BUF_UART_TX_WAIT);
+        buf_tmp->head.channel = i;
+        buf_tmp->head.len = i + 3;
         
-        bsp_uart_tx(data);
-    }
-    
-    for (volatile uint8_t i = 1; i < 10; i+=2)
-    {
-        data[IFACE_NUM_PTR] = i;
+        for (volatile uint8_t j = 0; j < buf_tmp->head.len; j++)
+        {
+            buf_tmp->data[j] = (i << 4) | j;
+        }
         
-        while (!bsp_uart_tx(data));
+        bsp_uart_tx(i);
     }
 #endif
 }
 
-bool bsp_uart_tx(const uint8_t *const _data)
+bool bsp_uart_tx(const uint8_t _n)
 {
-    const uint8_t iface_num = _data[IFACE_NUM_PTR];
+    buf_t *const buf_tmp = buf_get_ch(BUF_UART_TX_WAIT, _n);
 
     if (false
-        || uart[iface_num].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
-        || uart[iface_num].tx_dma->CR & DMA_SxCR_EN
+        || buf_tmp == NULL
+        || uart[_n].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
+        || uart[_n].tx_dma->CR & DMA_SxCR_EN
         )
     {
-        BSP_PRINTF("<U%d>txF\n", iface_num);
         return false;
     }
 
-    uart[iface_num].tx_dma->NDTR     = _data[LEN_PTR] - DATA_PTR;
-    uart[iface_num].tx_dma->M0AR     = (uint32_t)(&_data[DATA_PTR]);
-    DMA_IFCR(uart[iface_num].tx_dma) = DMA_IF_LS(uart[iface_num].tx_dma, 0x3FU);
-    uart[iface_num].tx_dma->CR      |= DMA_SxCR_EN;
+    uart[_n].tx_dma->NDTR     = buf_tmp->head.len;
+    uart[_n].tx_dma->M0AR     = (uint32_t)(buf_tmp->data);
+    DMA_IFCR(uart[_n].tx_dma) = DMA_IF_LS(uart[_n].tx_dma, 0x3FU);
+    uart[_n].tx_dma->CR      |= DMA_SxCR_EN;
 
-    uart[iface_num].uart->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
-    SET_IRQ_PRI(_irq_num(uart[iface_num].uart), TX_PRI);
-    uart[iface_num].uart->CR1 |=  (USART_CR1_TE);
+    uart[_n].uart->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
+    SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
+    uart[_n].uart->CR1 |=  (USART_CR1_TE);
 
-    BSP_PRINTF("<U%d>txT\n", _data[IFACE_NUM_PTR]);
-    return true;
-}
+    BSP_PRINTF("<U%d>txT\n", _n);
 
-__WEAK void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
-{
-    BSP_PRINTF("<U%d>txkb%s\n", _n, (_ok) ? "T" : "F");
-}
-
-__WEAK bool bsp_uart_rx_callback(uint8_t *const _data)
-{
-    BSP_PRINTF("<U%d>rxkb%#08X %d\n", _data[IFACE_NUM_PTR], (uint32_t)_data, _data[LEN_PTR]);
-    
     return true;
 }
 

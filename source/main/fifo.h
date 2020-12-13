@@ -74,8 +74,8 @@ typedef enum
     BUF_FREE = 0,
     BUF_HOST_RX_WAIT,
     BUF_HOST_TX_WAIT,
-    BUF_SLAVE_RX_WAIT,
-    BUF_SLAVE_TX_WAIT,
+    BUF_UART_RX_WAIT,
+    BUF_UART_TX_WAIT,
 } buf_state_t;
 
 /***************************************************************************************************
@@ -88,4 +88,5 @@ typedef enum
 
 buf_t *const buf_catch(const buf_state_t _state);
 buf_t *const buf_get(const buf_state_t _state);
+buf_t *const buf_get_ch(const buf_state_t _state, const uint8_t _ch);
 void buf_free(buf_t *const _buf);

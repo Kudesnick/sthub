@@ -39,14 +39,6 @@ extern "C" {
  *                                    PUBLIC FUNCTION PROTOTYPES                                   *
  **************************************************************************************************/
 
-void bsp_uart_init(void);
-
-bool bsp_uart_tx(const uint8_t *const _data);
-
-void bsp_uart_tx_callback(const uint8_t _n, const bool _ok);
-
-bool bsp_uart_rx_callback(uint8_t *const _data);
-
 #ifdef __cplusplus
 } // extern "C"
 #endif
