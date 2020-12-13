@@ -34,6 +34,8 @@
  *                                       DEFINITIONS
  **************************************************************************************************/
 
+#define V_TAB_SIZE 0x76
+
 /***************************************************************************************************
  *                                      PRIVATE TYPES
  **************************************************************************************************/
@@ -75,11 +77,21 @@
     __asm(".global __ARM_use_no_argv\n\t" "__ARM_use_no_argv:\n\t");
 #endif
 
-volatile const uint32_t v_tab[0x100] __attribute__((section("V_TAB_ADDR")));
+typedef uint32_t v_tab_item_t;
+volatile const v_tab_item_t v_tab[V_TAB_SIZE] __attribute__((section("V_TAB_ADDR")));
 
-int main(void)
+int main(int argument_count, char **argument_array)
 {
-    memcpy((void *)v_tab, (const void *)(SCB->VTOR), sizeof(v_tab));
+    (void)argument_count;
+    (void)argument_array;
+
+    for (volatile uint16_t i = 0; i < sizeof(v_tab)/sizeof(v_tab[0]); i++)
+    {
+        volatile v_tab_item_t *const v_tab_ram = (v_tab_item_t *)v_tab;
+        volatile v_tab_item_t *const v_tab_rom = (v_tab_item_t *)SCB->VTOR;
+    
+        v_tab_ram[i] = v_tab_rom[i];
+    }
     SCB->VTOR = (uint32_t)v_tab;
 
     bsp_init();
