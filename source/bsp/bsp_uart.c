@@ -256,7 +256,7 @@ static void _rx_callback(const uint8_t _n)
         
         if (buf_tmp == NULL)
         {
-            BSP_PRINTF("<U>" ERR_STR "Buf OVF\n");
+            BSP_PRINTF("<U%d>" ERR_STR "Buf OVF\n", _n);
         }
         else
         {
@@ -322,20 +322,6 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         
         return;
     }
-    if (true
-        && u->uart->CR1 & USART_CR1_TCIE
-        && sreg & USART_SR_TC
-       )
-    {
-        // TX complete
-        u->uart->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
-        BSP_PRINTF("<U%d>irTX\n", _n);
-                
-        u->uart->CR1 |=  USART_CR1_RE;
-        SET_IRQ_PRI(_irq_num(uart[_n].uart), RX_PRI);
-        
-        return;
-    }
     if (!result)
     {
         BSP_PRINTF("<U%d>irU\n", _n);
@@ -343,27 +329,35 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
 }
 
 // DMA TX
-static void _uart_dma_tx_irq_hndl(const bsp_uart_unit_t *const _u)
+static void _uart_dma_tx_irq_hndl(const uint8_t _n)
 {
-    if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_TCIF))
+    const bsp_uart_unit_t *const u = &uart[_n];
+
+    if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_TCIF))
     {
-        DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_TCIF); 
-        _u->uart->CR1 |= USART_CR1_TCIE;
-        BSP_PRINTF("<U>dmaTC\n");
+        DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_TCIF); 
+        u->uart->CR1 &= ~USART_CR1_TCIE;
+        SET_IRQ_PRI(_irq_num(u->uart), RX_PRI);
+        u->uart->CR1 |=  USART_CR1_RE;
+        BSP_PRINTF("<U%d>dmaTC\n", _n);
+        
+        // TX complete
+        buf_t *const buf_tmp = (buf_t *)(u->tx_dma->M0AR - sizeof(buf_hdr_t));
+        buf_free(buf_tmp);
     }
-    else if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_DMEIF))
+    else if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_DMEIF))
     {
-        DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_DMEIF);
-        BSP_PRINTF("<U>" ERR_STR "dmaDME\n");
+        DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_DMEIF);
+        BSP_PRINTF("<U%d>" ERR_STR "dmaDME\n", _n);
     }
-    else if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_TEIF))
+    else if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_TEIF))
     {
-        DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_TEIF);
-        BSP_PRINTF("<U>" ERR_STR "dmaTE\n");
+        DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_TEIF);
+        BSP_PRINTF("<U%d>" ERR_STR "dmaTE\n", _n);
     }
     else
     {
-        BSP_PRINTF("<U>" ERR_STR "dmaU\n");
+        BSP_PRINTF("<U%d>" ERR_STR "dmaU\n", _n);
     }
 }
 
@@ -442,43 +436,43 @@ void UART9_IRQ_HNDL(void) {_uart_irq_hdl(9);}
 #endif
 
 #ifdef UART0_DMA_TX_IRQ_HNDL
-void UART0_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[0]);}
+void UART0_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(0);}
 #endif
 
 #ifdef UART1_DMA_TX_IRQ_HNDL
-void UART1_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[1]);}
+void UART1_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(1);}
 #endif
 
 #ifdef UART2_DMA_TX_IRQ_HNDL
-void UART2_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[2]);}
+void UART2_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(2);}
 #endif
 
 #ifdef UART3_DMA_TX_IRQ_HNDL
-void UART3_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[3]);}
+void UART3_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(3);}
 #endif
 
 #ifdef UART4_DMA_TX_IRQ_HNDL
-void UART4_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[4]);}
+void UART4_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(4);}
 #endif
 
 #ifdef UART5_DMA_TX_IRQ_HNDL
-void UART5_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[5]);}
+void UART5_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(5);}
 #endif
 
 #ifdef UART6_DMA_TX_IRQ_HNDL
-void UART6_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[6]);}
+void UART6_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(6);}
 #endif
 
 #ifdef UART7_DMA_TX_IRQ_HNDL
-void UART7_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[7]);}
+void UART7_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(7);}
 #endif
 
 #ifdef UART8_DMA_TX_IRQ_HNDL
-void UART8_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[8]);}
+void UART8_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(8);}
 #endif
 
 #ifdef UART9_DMA_TX_IRQ_HNDL
-void UART9_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[9]);}
+void UART9_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(9);}
 #endif
 
 /***************************************************************************************************
@@ -506,8 +500,16 @@ void bsp_uart_init(void)
         {
             buf_tmp->data[j] = (i << 4) | j;
         }
-        
-        bsp_uart_tx(i);
+    }
+
+    for (volatile uint8_t i = 1; i < UART_CNT; i+=2)
+    {
+        while (!bsp_uart_tx(i));
+    }
+    
+    for (volatile uint8_t i = 0; i < UART_CNT; i+=2)
+    {
+        while (!bsp_uart_tx(i));
     }
 #endif
 }
