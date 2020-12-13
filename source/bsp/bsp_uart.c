@@ -260,6 +260,8 @@ static void _rx_callback(const uint8_t _n)
         }
         else
         {
+            BSP_PRINTF("<U%d>rx %d\n", _n, buf[_n]->head.len);
+        
             buf_tmp->head.channel = _n;
             buf_tmp->head.len = 0;
             buf[_n]->head.state = BUF_HOST_TX_WAIT;
