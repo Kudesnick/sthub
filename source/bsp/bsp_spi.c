@@ -20,6 +20,7 @@
 #include "bsp_spi_config.h"
 #include "misc_macro.h"
 #include "bsp.h"
+#include "fifo.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -45,9 +46,6 @@
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-
-uint8_t buf_rx[BUF_RX_CNT][BUF_RX_LEN];
-uint8_t buf_cnt = 1;
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -87,40 +85,11 @@ static void _DMA_TX_reload(void)
 
 void EXTI4_IRQHandler(void)
 {
-    const uint16_t len = sizeof(buf_rx[0]) - SPI_DMA_RX->NDTR;
+    BSP_PRINTF("<s>exti\n");
+    _DMA_RX_reload();
+    _DMA_TX_reload();
 
-    // Switch RX buffer
-    SPI_DMA_RX->CR &= ~DMA_SxCR_EN;
-    SPI_DMA_RX->CR ^= DMA_SxCR_CT;
-    SPI_DMA_RX->CR |= DMA_SxCR_EN;
-    
-    SET_IRQ_PRI(GPIO_IRQ_CHANNEL(SPI_PIN_NSS), TX_PRI);
-
-    if (len)
-    {
-        const uint8_t buf_num = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? 0 : 1;
-        buf_rx[buf_num][LEN_PTR] = len;
-
-        if (bsp_spi_rx_callback(buf_rx[buf_num]))
-        {
-            if (buf_cnt++ > BUF_RX_CNT)
-            {
-                buf_cnt = 0;
-            }
-            if (buf_num)
-            {
-                SPI_DMA_RX->M0AR = (uint32_t)&buf_rx[buf_cnt];
-            }
-            else
-            {
-                SPI_DMA_RX->M1AR = (uint32_t)&buf_rx[buf_cnt];
-            }
-        }
-    }
-    
     EXTI->PR = GPIO_EXTI_LINE(SPI_PIN_NSS);
-    
-    SET_IRQ_PRI(GPIO_IRQ_CHANNEL(SPI_PIN_NSS), RX_PRI);
 }
 
 // Rx
@@ -128,9 +97,14 @@ void DMA2_Stream2_IRQHandler(void)
 {
     if (DMA2->LISR & DMA_FLAG_TCIF2_6)
     {
-        // Called from EXTI interrupt, when switching RX buffer or when buffer is full
+        // Called when switching RX buffer or when buffer is full
         DMA2->LIFCR |= DMA_FLAG_TCIF2_6;
         BSP_PRINTF("<s>rxTC\n");
+
+#warning maybe toggle registers
+        __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
+        ((buf_t *const)buf_cmplt)->head.state = BUF_UART_TX_WAIT;
+        *buf_cmplt = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
         
         return;
     }
@@ -168,7 +142,10 @@ void DMA2_Stream3_IRQHandler(void)
 #endif   
         BSP_PRINTF("<s>txTC\n");
 
-        bsp_spi_tx_callback(true);
+#warning maybe toggle registers
+        __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
+        buf_free((buf_t *const)buf_cmplt);
+        *buf_cmplt = (uint32_t)buf_get(BUF_HOST_TX_WAIT);
         return;
     }
     else if (DMA2->LISR & DMA_FLAG_DMEIF3_7)
@@ -187,7 +164,6 @@ void DMA2_Stream3_IRQHandler(void)
     }
     
     _DMA_TX_reload();
-    bsp_spi_tx_callback(false);
 }
 
 void SPI1_IRQHandler(void)
@@ -245,7 +221,9 @@ void bsp_spi_init(void)
         GPIO_PORT_SOURCE(SPI_PIN_NSS) << (GPIO_PIN_SOURCE(SPI_PIN_NSS) & 3);
     EXTI->IMR  |=  (GPIO_EXTI_LINE(SPI_PIN_NSS));
     EXTI->EMR  &= ~(GPIO_EXTI_LINE(SPI_PIN_NSS));
+    // Rising trigger enable
     EXTI->RTSR |=  (GPIO_EXTI_LINE(SPI_PIN_NSS));
+    // Falling trigger disable
     EXTI->FTSR &= ~(GPIO_EXTI_LINE(SPI_PIN_NSS));
     ENABLE_IRQ(GPIO_IRQ_CHANNEL(SPI_PIN_NSS), RX_PRI);
 
@@ -273,10 +251,10 @@ void bsp_spi_init(void)
                         (3 << DMA_SxCR_PL_Pos);
     SPI_DMA_RX->FCR   = 0;
     SPI_DMA_RX->CR   |= DMA_SxCR_DBM;
-    SPI_DMA_RX->NDTR  = sizeof(buf_rx[0]);
+    SPI_DMA_RX->NDTR  = sizeof(buf_t);
     SPI_DMA_RX->PAR   = (uint32_t)&(SPI_UNIT->DR);
-    SPI_DMA_RX->M0AR  = (uint32_t)buf_rx[0];
-    SPI_DMA_RX->M1AR  = (uint32_t)buf_rx[1];
+    SPI_DMA_RX->M0AR  = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
+    SPI_DMA_RX->M1AR  = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
     DMA2->LIFCR = 0x3FU << 0x10; // Clear all interrupt flags
     SPI_DMA_RX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
     SPI_DMA_RX->FCR  |= DMA_IT_FE;
@@ -288,10 +266,13 @@ void bsp_spi_init(void)
     while(SPI_DMA_TX->CR & DMA_SxCR_EN);
     SPI_DMA_TX->CR    = (SPI_DMA_TX_CH << DMA_SxCR_CHSEL_Pos) | DMA_SxCR_MINC | DMA_SxCR_DIR_0;
     SPI_DMA_TX->FCR   = 0;
-    SPI_DMA_TX->CR   &= ~DMA_SxCR_DBM;
+    SPI_DMA_TX->CR   |= DMA_SxCR_DBM;
+    SPI_DMA_TX->NDTR  = sizeof(buf_t);
     SPI_DMA_TX->PAR   = (uint32_t)&(SPI_UNIT->DR);
     DMA2->LIFCR = 0x3FU << 0x16; // Clear all interrupt flags
     SPI_DMA_TX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
+#warning not tested!
+    SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
     SPI_UNIT->CR2    |= SPI_CR2_TXDMAEN;
 
 #ifdef DEBUG_BSP
@@ -302,35 +283,6 @@ void bsp_spi_init(void)
         bsp_spi_tx(data);
     }
 #endif
-}
-
-bool bsp_spi_tx(const uint8_t *const _data)
-{
-    if (SPI_DMA_TX->CR & DMA_SxCR_EN)
-    {
-        BSP_PRINTF("<s>txF\n");
-        return false;
-    }
-    
-    SPI_DMA_TX->NDTR  = _data[LEN_PTR];
-    SPI_DMA_TX->M0AR  = (uint32_t)_data;
-    DMA2->LIFCR = 0x3FU << 0x16; // Clear all interrupt flags
-    SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
-
-    BSP_PRINTF("<s>txT\n");
-    return true;
-}
-
-__WEAK void bsp_spi_tx_callback(const bool _ok)
-{
-    BSP_PRINTF("<s> SPI TX complete callback. Result: %s\n", (_ok) ? "T" : "F");
-}
-
-__WEAK bool bsp_spi_rx_callback(uint8_t *const _data)
-{
-    BSP_PRINTF("<s> SPI RX callback addr: %#08X, size: %d bytes\n", (uint32_t)_data, _data[LEN_PTR]);
-    
-    return true;
 }
 
 /**************************************************************************************************
