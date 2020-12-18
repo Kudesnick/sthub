@@ -20,9 +20,9 @@ spi.max_speed_hz = 8000 # 63 MHz - MOSI limit, 32 MHz - MISO limit
 spi.mode = 0b00 # CPOL0|CPHA0
 spi.cshigh = False
 
-d_out = [0x00, 0x00, 0x22, 0x23, 0x24, 0x12]
-d_out[1] = len(d_out) + 1
-d_out.append(libscrc.crc8(bytes(d_out)))
+d_out = [i for i in range(1, 32)]
+d_out[0] = 0x11
+#d_out.append(libscrc.crc8(bytes(d_out)))
 res_out = ''.join('%02x '%i for i in d_out)
 
 d_in  = spi.xfer(d_out)
