@@ -337,7 +337,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>HSE_VALUE=8000000 HSE_ON STM32F413xx DEBUG</Define>
+              <Define>HSE_VALUE=8000000 HSE_ON STM32F413xx DEBUG DEBUG_BSP</Define>
               <Undefine></Undefine>
               <IncludePath>..\source\bsp;..\source\main;..\source\rtt</IncludePath>
             </VariousControls>

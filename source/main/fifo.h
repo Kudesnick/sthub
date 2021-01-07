@@ -72,10 +72,10 @@ typedef __PACKED_STRUCT
 typedef enum
 {
     BUF_FREE = 0,
-    BUF_HOST_RX_WAIT,
-    BUF_HOST_TX_WAIT,
-    BUF_UART_RX_WAIT,
-    BUF_UART_TX_WAIT,
+    BUF_HOST_RX_WAIT, // 1
+    BUF_HOST_TX_WAIT, // 2
+    BUF_UART_RX_WAIT, // 3
+    BUF_UART_TX_WAIT, // 4
 } buf_state_t;
 
 /***************************************************************************************************

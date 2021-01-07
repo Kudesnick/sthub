@@ -504,7 +504,7 @@ void bsp_uart_init(void)
         buf[i]->head.len = 0;
     }
     
-#ifdef DEBUG_BSP
+#ifdef TEST_BSP_UART
     for (volatile uint8_t i = 0; i < UART_CNT; i++)
     {
         buf_t *const buf_tmp = buf_catch(BUF_UART_TX_WAIT);
