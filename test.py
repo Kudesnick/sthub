@@ -5,6 +5,8 @@ import sys
 import libscrc
 import spidev
 
+buf_len = 32
+
 spi = spidev.SpiDev()
 spi.open(0, 1)
 
@@ -20,16 +22,22 @@ spi.max_speed_hz = 8000 # 63 MHz - MOSI limit, 32 MHz - MISO limit
 spi.mode = 0b00 # CPOL0|CPHA0
 spi.cshigh = False
 
-d_out = [i for i in range(1, 32)]
-d_out[0] = 0x11
-#d_out.append(libscrc.crc8(bytes(d_out)))
-res_out = ''.join('%02x '%i for i in d_out)
+def send_msg(iface):
 
-d_in  = spi.xfer(d_out)
-res_in  = ''.join('%02x '%i for i in d_in )
+    d_out = [i for i in range(0, buf_len)]
+    d_out[0] = 0x01 | (iface << 4)
+    d_out[1] = buf_len - 2
+    #d_out.append(libscrc.crc8(bytes(d_out)))
+    res_out = ''.join('%02x '%i for i in d_out)
 
-print ("out > ", res_out)
-print ("in  < ", res_in)
+    d_in  = spi.xfer(d_out)
+    res_in  = ''.join('%02x '%i for i in d_in )
+
+    print ("out > ", res_out)
+    print ("in  < ", res_in)
+
+send_msg(1)
+send_msg(2)
 
 spi.close()
 sys.exit(0)

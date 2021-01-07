@@ -87,7 +87,7 @@ void EXTI4_IRQHandler(void)
 {
     BSP_PRINTF("<s>exti\n");
     _DMA_RX_reload();
-    _DMA_TX_reload();
+//    _DMA_TX_reload();
 
     EXTI->PR = GPIO_EXTI_LINE(SPI_PIN_NSS);
 }
@@ -103,7 +103,7 @@ void DMA2_Stream2_IRQHandler(void)
 
 #warning maybe toggle registers
         __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
-        ((buf_t *const)buf_cmplt)->head.state = BUF_UART_TX_WAIT;
+        ((buf_t *const)*buf_cmplt)->head.state = BUF_UART_TX_WAIT;
         *buf_cmplt = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
         
         return;
@@ -144,7 +144,7 @@ void DMA2_Stream3_IRQHandler(void)
 
 #warning maybe toggle registers
         __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
-        buf_free((buf_t *const)buf_cmplt);
+        buf_free((buf_t *const)*buf_cmplt);
         *buf_cmplt = (uint32_t)buf_get(BUF_HOST_TX_WAIT);
         return;
     }
@@ -156,7 +156,7 @@ void DMA2_Stream3_IRQHandler(void)
     else if (DMA2->LISR & DMA_FLAG_TEIF3_7)
     {
         DMA2->LIFCR |= DMA_FLAG_TEIF3_7;
-        BSP_PRINTF("<>" ERR_STR "txT\n");
+        BSP_PRINTF("<s>" ERR_STR "txT\n");
     }
     else
     {
@@ -272,8 +272,8 @@ void bsp_spi_init(void)
     DMA2->LIFCR = 0x3FU << 0x16; // Clear all interrupt flags
     SPI_DMA_TX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
 #warning not tested!
-    SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
-    SPI_UNIT->CR2    |= SPI_CR2_TXDMAEN;
+//    SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
+//    SPI_UNIT->CR2    |= SPI_CR2_TXDMAEN;
 
 #ifdef DEBUG_BSP
     // Test code
