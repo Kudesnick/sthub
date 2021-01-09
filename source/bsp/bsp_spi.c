@@ -86,10 +86,13 @@ static void _DMA_TX_reload(void)
 void EXTI4_IRQHandler(void)
 {
     BSP_PRINTF("<s>exti\n");
-//    _DMA_RX_reload();
-//    _DMA_TX_reload();
 
     EXTI->PR = GPIO_EXTI_LINE(SPI_PIN_NSS);
+    if (SPI_DMA_RX->NDTR != sizeof(buf_t))
+    {
+        _DMA_RX_reload();
+        _DMA_TX_reload();
+    }
 }
 
 // Rx
@@ -101,7 +104,8 @@ void DMA2_Stream2_IRQHandler(void)
         DMA2->LIFCR |= DMA_FLAG_TCIF2_6;
         BSP_PRINTF("<s>rxTC\n");
 
-        __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
+        __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ?
+                                         &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
         ((buf_t *const)*buf_cmplt)->head.state = BUF_UART_TX_WAIT;
         *buf_cmplt = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
         
@@ -232,7 +236,7 @@ void bsp_spi_init(void)
     CLR_PENDING(SPI1_IRQn);
     ENABLE_IRQ(SPI1_IRQn, TX_PRI);
     CLR_PENDING(DMA2_Stream2_IRQn); // RX
-    ENABLE_IRQ(DMA2_Stream2_IRQn, TX_PRI);
+    ENABLE_IRQ(DMA2_Stream2_IRQn, RX_PRI);
     CLR_PENDING(DMA2_Stream3_IRQn); // TX
     ENABLE_IRQ(DMA2_Stream3_IRQn, TX_PRI);
     // Reset unit
