@@ -22,12 +22,12 @@ spi.max_speed_hz = 8000 # 63 MHz - MOSI limit, 32 MHz - MISO limit
 spi.mode = 0b00 # CPOL0|CPHA0
 spi.cshigh = False
 
-def send_msg(iface):
+def send_msg(iface, msg_len):
 
-    d_out = [i for i in range(0, buf_len)]
+    d_out = [i for i in range(0, msg_len)]
     d_out[0] = 0x01 | (iface << 4)
-    d_out[1] = buf_len - 2
-    #d_out.append(libscrc.crc8(bytes(d_out)))
+    d_out[1] = msg_len - 2
+    d_out[-1] = libscrc.crc8(bytes(d_out[:-1]))
     res_out = ''.join('%02x '%i for i in d_out)
 
     d_in  = spi.xfer(d_out)
@@ -36,8 +36,8 @@ def send_msg(iface):
     print ("out > ", res_out)
     print ("in  < ", res_in)
 
-send_msg(1)
-send_msg(2)
+for i in range(0, 10):
+    send_msg(i, buf_len)
 
 spi.close()
 sys.exit(0)
