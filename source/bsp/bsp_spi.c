@@ -27,17 +27,7 @@
  **************************************************************************************************/
 
 #define RX_PRI 0
-#define TX_PRI 2
-
-/**
- *  @brief      Clear data register after transmit complete.
- *  @details    Data register not atomatic clear after transmit. And master receives last byte
- *              always. This setting has clear data register after ending of transmit. And master
- *              receives zero data untill new transaction.
- */
-#ifndef TXCLR
-    #define TXCLR 1
-#endif
+#define TX_PRI 0
 
 /***************************************************************************************************
  *                                          PRIVATE TYPES
@@ -46,6 +36,8 @@
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
+
+buf_t fake_buf __attribute__((section("DMA_BUFFERS")));
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -139,16 +131,19 @@ void DMA2_Stream3_IRQHandler(void)
 {
     if (DMA2->LISR & DMA_FLAG_TCIF3_7)
     {
-        DMA2->LIFCR |= DMA_FLAG_TCIF3_7;
-#if (TXCLR != 0)
-        SPI_UNIT->CR2 |= SPI_CR2_TXEIE;
-#endif   
+        DMA2->LIFCR |= DMA_FLAG_TCIF3_7;  
         BSP_PRINTF("<s>txTC\n");
 
-#warning maybe toggle registers
         __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
         buf_free((buf_t *const)*buf_cmplt);
         *buf_cmplt = (uint32_t)buf_get(BUF_HOST_TX_WAIT);
+        
+        if (*buf_cmplt == NULL)
+        {
+            *buf_cmplt = (uint32_t)&fake_buf;
+            fake_buf.data[0]++;
+        }
+        
         return;
     }
     else if (DMA2->LISR & DMA_FLAG_DMEIF3_7)
@@ -171,19 +166,6 @@ void DMA2_Stream3_IRQHandler(void)
 
 void SPI1_IRQHandler(void)
 {
-#if (TXCLR != 0)
-    if (true
-        && SPI_UNIT->CR2 & SPI_CR2_TXEIE
-        && SPI_UNIT->SR & SPI_SR_TXE
-       )
-    {
-        SPI_UNIT->DR = 0x55;
-        SPI_UNIT->CR2 &= ~SPI_CR2_TXEIE;
-        BSP_PRINTF("<s>TXCLR\n");
-        
-        return;
-    }
-#endif
     if (SPI_UNIT->SR & SPI_SR_CRCERR)
     {
         SPI_UNIT->SR &= ~SPI_SR_CRCERR;
@@ -260,7 +242,6 @@ void bsp_spi_init(void)
     SPI_DMA_RX->M1AR  = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
     DMA2->LIFCR = 0x3FU << 0x10; // Clear all interrupt flags
     SPI_DMA_RX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
-    SPI_DMA_RX->FCR  |= DMA_IT_FE;
     SPI_DMA_RX->CR   |= DMA_SxCR_EN; // Enable DMA
     SPI_UNIT->CR2    |= SPI_CR2_RXDMAEN;
     
@@ -272,11 +253,12 @@ void bsp_spi_init(void)
     SPI_DMA_TX->CR   |= DMA_SxCR_DBM;
     SPI_DMA_TX->NDTR  = sizeof(buf_t);
     SPI_DMA_TX->PAR   = (uint32_t)&(SPI_UNIT->DR);
+    SPI_DMA_TX->M0AR  = (uint32_t)&fake_buf;
+    SPI_DMA_TX->M1AR  = (uint32_t)&fake_buf;
     DMA2->LIFCR = 0x3FU << 0x16; // Clear all interrupt flags
     SPI_DMA_TX->CR   |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
-#warning not tested!
-//    SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
-//    SPI_UNIT->CR2    |= SPI_CR2_TXDMAEN;
+    SPI_DMA_TX->CR   |= DMA_SxCR_EN; // Enable DMA
+    SPI_UNIT->CR2    |= SPI_CR2_TXDMAEN;
 
 #ifdef TEST_BSP_SPI
     // Test code
