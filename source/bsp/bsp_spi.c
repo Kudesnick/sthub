@@ -134,7 +134,8 @@ void DMA2_Stream3_IRQHandler(void)
         DMA2->LIFCR |= DMA_FLAG_TCIF3_7;  
         BSP_PRINTF("<s>txTC\n");
 
-        __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ? &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
+        __IO uint32_t *const buf_cmplt = (SPI_DMA_TX->CR & DMA_SxCR_CT) ?
+                                         &SPI_DMA_TX->M0AR : &SPI_DMA_TX->M1AR;
         buf_free((buf_t *const)*buf_cmplt);
         *buf_cmplt = (uint32_t)buf_get(BUF_HOST_TX_WAIT);
         
