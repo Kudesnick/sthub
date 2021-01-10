@@ -110,6 +110,7 @@ int main(void)
     for(;;)
     {
         usr_put_routine();
+        bsp_uart_routine();
         __WFI();
     }
 

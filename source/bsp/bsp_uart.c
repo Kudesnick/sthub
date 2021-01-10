@@ -490,6 +490,33 @@ void UART8_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(8);}
 void UART9_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(9);}
 #endif
 
+static bool _bsp_uart_tx(const uint8_t _n)
+{
+    buf_t *const buf_tmp = buf_get_ch(BUF_UART_TX_WAIT, _n);
+
+    if (false
+        || buf_tmp == NULL
+        || uart[_n].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
+        || uart[_n].tx_dma->CR & DMA_SxCR_EN
+        )
+    {
+        return false;
+    }
+
+    uart[_n].tx_dma->NDTR     = buf_tmp->head.len;
+    uart[_n].tx_dma->M0AR     = (uint32_t)(buf_tmp->data);
+    DMA_IFCR(uart[_n].tx_dma) = DMA_IF_LS(uart[_n].tx_dma, 0x3FU);
+    uart[_n].tx_dma->CR      |= DMA_SxCR_EN;
+
+    uart[_n].uart->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
+    SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
+    uart[_n].uart->CR1 |=  (USART_CR1_TE);
+
+    BSP_PRINTF("<U%d>txT\n", _n);
+
+    return true;
+}
+
 /***************************************************************************************************
  *                                      PUBLIC FUNCTIONS
  **************************************************************************************************/
@@ -519,7 +546,7 @@ void bsp_uart_init(void)
 
     for (volatile uint8_t i = 1; i < UART_CNT; i+=2)
     {
-        while (!bsp_uart_tx(i));
+        while (!_bsp_uart_tx(i));
     }
 
     /* This delay is necessary because no byte receive interrupts have yet occurred at the start
@@ -528,36 +555,17 @@ void bsp_uart_init(void)
     
     for (volatile uint8_t i = 0; i < UART_CNT; i+=2)
     {
-        while (!bsp_uart_tx(i));
+        while (!_bsp_uart_tx(i));
     }
 #endif
 }
 
-bool bsp_uart_tx(const uint8_t _n)
+void bsp_uart_routine(void)
 {
-    buf_t *const buf_tmp = buf_get_ch(BUF_UART_TX_WAIT, _n);
-
-    if (false
-        || buf_tmp == NULL
-        || uart[_n].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
-        || uart[_n].tx_dma->CR & DMA_SxCR_EN
-        )
+    for (int8_t i = UART_CNT - 1; i >= 0; i--)
     {
-        return false;
+        _bsp_uart_tx(i);
     }
-
-    uart[_n].tx_dma->NDTR     = buf_tmp->head.len;
-    uart[_n].tx_dma->M0AR     = (uint32_t)(buf_tmp->data);
-    DMA_IFCR(uart[_n].tx_dma) = DMA_IF_LS(uart[_n].tx_dma, 0x3FU);
-    uart[_n].tx_dma->CR      |= DMA_SxCR_EN;
-
-    uart[_n].uart->CR1 &= ~(USART_CR1_RE | USART_CR1_IDLEIE);
-    SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
-    uart[_n].uart->CR1 |=  (USART_CR1_TE);
-
-    BSP_PRINTF("<U%d>txT\n", _n);
-
-    return true;
 }
 
 /**************************************************************************************************

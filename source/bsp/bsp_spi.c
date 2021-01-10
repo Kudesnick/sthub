@@ -96,11 +96,17 @@ void DMA2_Stream2_IRQHandler(void)
         DMA2->LIFCR |= DMA_FLAG_TCIF2_6;
         BSP_PRINTF("<s>rxTC\n");
 
-        __IO uint32_t *const buf_cmplt = (SPI_DMA_RX->CR & DMA_SxCR_CT) ?
+        __IO uint32_t *const buf_reg = (SPI_DMA_RX->CR & DMA_SxCR_CT) ?
                                          &SPI_DMA_RX->M0AR : &SPI_DMA_RX->M1AR;
-        ((buf_t *const)*buf_cmplt)->head.state = BUF_UART_TX_WAIT;
-        *buf_cmplt = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
-        
+        buf_t *const buf_cmplt = (buf_t *const)*buf_reg;
+
+        buf_cmplt->head.state = BUF_UART_TX_WAIT;
+        if (buf_cmplt->head.len == 0)
+        {
+            buf_free(buf_cmplt);
+        }
+        *buf_reg = (uint32_t)buf_catch(BUF_HOST_RX_WAIT);
+
         return;
     }
     else if (DMA2->LISR & DMA_FLAG_DMEIF2_6)
