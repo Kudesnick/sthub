@@ -143,12 +143,16 @@ void DMA2_Stream3_IRQHandler(void)
         __IO uint32_t *const buf_cmplt = (SPI_DMA_TX->CR & DMA_SxCR_CT) ?
                                          &SPI_DMA_TX->M0AR : &SPI_DMA_TX->M1AR;
         buf_free((buf_t *const)*buf_cmplt);
-        *buf_cmplt = (uint32_t)buf_get(BUF_HOST_TX_WAIT);
+        *buf_cmplt = (uint32_t)buf_get(BUF_HOST_TX_RDY);
         
         if (*buf_cmplt == NULL)
         {
             *buf_cmplt = (uint32_t)&fake_buf;
             fake_buf.data[0]++;
+        }
+        else
+        {
+            ((buf_t *const)*buf_cmplt)->head.state = BUF_HOST_TX_WAIT;
         }
         
         return;

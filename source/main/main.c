@@ -98,18 +98,24 @@ int main(void)
 
     bsp_init();
 
+#ifdef DEBUG
     printf(" \033[31mC\033[32mO\033[33mL\033[34mO\033[35mR\033[42m \033[0m"
             "\033[36mT\033[37mE\033[30m\033[47mS\033[0mT\n"); // Color test
     usr_put_routine();
+#endif
 
     bsp_spi_init();
     bsp_uart_init();
 
+#ifdef DEBUG
     printf("Run\n");
+#endif
 
     for(;;)
     {
+#ifdef DEBUG
         usr_put_routine();
+#endif
         bsp_uart_routine();
         __WFI();
     }

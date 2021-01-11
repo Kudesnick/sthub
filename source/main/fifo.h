@@ -73,9 +73,10 @@ typedef enum
 {
     BUF_FREE = 0,
     BUF_HOST_RX_WAIT, // 1
-    BUF_HOST_TX_WAIT, // 2
-    BUF_UART_RX_WAIT, // 3
-    BUF_UART_TX_WAIT, // 4
+    BUF_HOST_TX_RDY , // 2
+    BUF_HOST_TX_WAIT, // 3
+    BUF_UART_RX_WAIT, // 4
+    BUF_UART_TX_WAIT, // 5
 } buf_state_t;
 
 /***************************************************************************************************
