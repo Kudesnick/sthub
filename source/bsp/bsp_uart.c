@@ -19,6 +19,8 @@
 #include "bsp_uart.h"
 #include "bsp_uart_config.h"
 #include "misc_macro.h"
+#include "bsp.h"
+#include "fifo.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -62,18 +64,11 @@ typedef struct
     uint8_t            tx_dma_ch;
 } bsp_uart_unit_t;
 
-typedef struct
-{
-    uint8_t ptr;
-    uint8_t cnt;
-    uint8_t data[UART_RX_BUF_NUM][UART_RX_BUF_SIZE];
-} buf_t;
-
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
 
-const bsp_uart_unit_t uart[] =
+const bsp_uart_unit_t uart[UART_CNT] =
 {
     {
         .uart           = UART0_UNIT     ,
@@ -147,7 +142,7 @@ const bsp_uart_unit_t uart[] =
     },
 };
 
-buf_t buf[countof(uart)];
+buf_t *buf[UART_CNT];
 
 /***************************************************************************************************
  *                                           PUBLIC DATA
@@ -255,16 +250,26 @@ static __INLINE void _rcc_reset(const void *const _u)
 
 static void _rx_callback(const uint8_t _n)
 {
-    buf_t *const buf_tmp = &buf[_n];
-    
-    if (bsp_uart_rx_callback(_n, buf_tmp->data[buf_tmp->cnt], buf_tmp->ptr))
+    for (;;)
     {
-        if (++buf_tmp->cnt >= countof(buf_tmp->data))
+        buf_t *const buf_tmp = buf_catch(BUF_UART_RX_WAIT);
+        
+        if (buf_tmp == NULL)
         {
-            buf_tmp->cnt = 0;
+            BSP_PRINTF("<U%d>" ERR_STR "Buf OVF\n", _n);
+        }
+        else
+        {
+            BSP_PRINTF("<U%d>rx %d\n", _n, buf[_n]->head.len);
+        
+            buf_tmp->head.channel = _n;
+            buf_tmp->head.len = 0;
+            buf[_n]->head.state = BUF_HOST_TX_RDY;
+            buf[_n] = buf_tmp;
+            
+            return;
         }
     }
-    buf_tmp->ptr = 0;
 }
 
 static __INLINE void _uart_irq_hdl(const uint8_t _n)
@@ -281,17 +286,22 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
     {
         if (sreg & USART_SR_ORE)
         {
-            BSP_PRINTF("<uart#%d> irq USART_SR_ORE\r\n", _n);
+            BSP_PRINTF("<U%d>irOR\r\n", _n);
         }
         if (sreg & USART_SR_RXNE)
         {
             u->uart->CR1 |= USART_CR1_IDLEIE;
             // not use printf for speed optimization 
-            // BSP_PRINTF("<uart#%d> irq USART_SR_RXNE\r\n", _n);
+            // BSP_PRINTF("<u%d>RXNE\n", _n);
 
             // received one byte
-            buf_t *const buf_tmp = &buf[_n];
-            buf_tmp->data[buf_tmp->cnt][buf_tmp->ptr++] = data;
+            buf_t *const buf_tmp = buf[_n];
+            buf_tmp->data[buf_tmp->head.len++] = data;
+            
+            if (buf_tmp->head.len >= (sizeof(buf_tmp->data)))
+            {
+                _rx_callback(_n);
+            }
             
             return;
         }
@@ -305,7 +315,7 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
         u->uart->CR1 &= ~USART_CR1_IDLEIE;
         
-        BSP_PRINTF("<uart#%d> irq USART_SR_IDLE\r\n", _n);
+        BSP_PRINTF("<U%d>irIDL\n", _n);
         
         // received all bytes
         _rx_callback(_n);
@@ -314,50 +324,55 @@ static __INLINE void _uart_irq_hdl(const uint8_t _n)
         
         return;
     }
+    
     if (true
         && u->uart->CR1 & USART_CR1_TCIE
         && sreg & USART_SR_TC
        )
     {
-        u->uart->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
-        BSP_PRINTF("<uart#%d> irq USART_SR_TXE\r\n", _n);
-        
         // TX complete
-        bsp_uart_tx_callback(_n, true);
-        
+        u->uart->CR1 &= ~(USART_CR1_TE | USART_CR1_TCIE);
+        BSP_PRINTF("<U%d>irTX\n", _n);
+
+        buf_t *const buf_tmp = (buf_t *)(u->tx_dma->M0AR - sizeof(buf_hdr_t));
+        buf_free(buf_tmp);
+
         u->uart->CR1 |=  USART_CR1_RE;
         SET_IRQ_PRI(_irq_num(uart[_n].uart), RX_PRI);
         
         return;
     }
+    
     if (!result)
     {
-        BSP_PRINTF("<uart#%d> irq unknown\r\n", _n);
+        BSP_PRINTF("<U%d>irU\n", _n);
     }
 }
 
 // DMA TX
-static void _uart_dma_tx_irq_hndl(const bsp_uart_unit_t *const _u)
+static void _uart_dma_tx_irq_hndl(const uint8_t _n)
 {
-    if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_TCIF))
+    const bsp_uart_unit_t *const u = &uart[_n];
+
+    if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_TCIF))
     {
-        DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_TCIF); 
-        _u->uart->CR1 |= USART_CR1_TCIE;
-        BSP_PRINTF("<uart> DMA TX irq DMA_FLAG_TCIF\r\n");
+        DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_TCIF); 
+        u->uart->CR1 |= USART_CR1_TCIE;
+        BSP_PRINTF("<U%d>dmaTC\n", _n);
     }
-    else if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_DMEIF))
+    else if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_DMEIF))
     {
-        DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_DMEIF);
-        BSP_PRINTF("<uart>" ERR_STR "DMA TX irq DMA_FLAG_DMEIF\r\n");
+        DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_DMEIF);
+        BSP_PRINTF("<U%d>" ERR_STR "dmaDME\n", _n);
     }
-    else if (DMA_ISR(_u->tx_dma) & DMA_IF_LS(_u->tx_dma, DMA_FLAG_TEIF))
+    else if (DMA_ISR(u->tx_dma) & DMA_IF_LS(u->tx_dma, DMA_FLAG_TEIF))
     {
-        DMA_IFCR(_u->tx_dma) |= DMA_IF_LS(_u->tx_dma, DMA_FLAG_TEIF);
-        BSP_PRINTF("<uart>" ERR_STR "DMA TX irq DMA_FLAG_TEIF\r\n");
+        DMA_IFCR(u->tx_dma) |= DMA_IF_LS(u->tx_dma, DMA_FLAG_TEIF);
+        BSP_PRINTF("<U%d>" ERR_STR "dmaTE\n", _n);
     }
     else
     {
-        BSP_PRINTF("<uart>" ERR_STR "DMA TX irq unknown\r\n");
+        BSP_PRINTF("<U%d>" ERR_STR "dmaU\n", _n);
     }
 }
 
@@ -436,79 +451,60 @@ void UART9_IRQ_HNDL(void) {_uart_irq_hdl(9);}
 #endif
 
 #ifdef UART0_DMA_TX_IRQ_HNDL
-void UART0_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[0]);}
+void UART0_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(0);}
 #endif
 
 #ifdef UART1_DMA_TX_IRQ_HNDL
-void UART1_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[1]);}
+void UART1_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(1);}
 #endif
 
 #ifdef UART2_DMA_TX_IRQ_HNDL
-void UART2_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[2]);}
+void UART2_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(2);}
 #endif
 
 #ifdef UART3_DMA_TX_IRQ_HNDL
-void UART3_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[3]);}
+void UART3_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(3);}
 #endif
 
 #ifdef UART4_DMA_TX_IRQ_HNDL
-void UART4_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[4]);}
+void UART4_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(4);}
 #endif
 
 #ifdef UART5_DMA_TX_IRQ_HNDL
-void UART5_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[5]);}
+void UART5_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(5);}
 #endif
 
 #ifdef UART6_DMA_TX_IRQ_HNDL
-void UART6_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[6]);}
+void UART6_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(6);}
 #endif
 
 #ifdef UART7_DMA_TX_IRQ_HNDL
-void UART7_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[7]);}
+void UART7_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(7);}
 #endif
 
 #ifdef UART8_DMA_TX_IRQ_HNDL
-void UART8_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[8]);}
+void UART8_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(8);}
 #endif
 
 #ifdef UART9_DMA_TX_IRQ_HNDL
-void UART9_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(&uart[9]);}
+void UART9_DMA_TX_IRQ_HNDL(void) {_uart_dma_tx_irq_hndl(9);}
 #endif
 
-/***************************************************************************************************
- *                                      PUBLIC FUNCTIONS
- **************************************************************************************************/
-
-void bsp_uart_init(void)
+static bool _bsp_uart_tx(const uint8_t _n)
 {
-    for (uint8_t i = 0; i < countof(uart); i++)
-    {
-        _uart_init(i);
-    }
-    
-#if (0) // defined(DEBUG)
-    static const uint8_t data[] = {0x55, 0x55, 0xFE, 0x03, 0x0E, 0xFE};
-    
-    for (uint8_t i = 0; i < 5; i++)
-    {
-        bsp_uart_tx(i, data, sizeof(data));
-    }
-#endif
-}
+    buf_t *const buf_tmp = buf_get_ch(BUF_UART_TX_WAIT, _n);
 
-bool bsp_uart_tx(const uint8_t _n, const uint8_t *const _data, const uint8_t _size)
-{
     if (false
+        || buf_tmp == NULL
         || uart[_n].uart->CR1 & (USART_CR1_TE | USART_CR1_IDLEIE)
         || uart[_n].tx_dma->CR & DMA_SxCR_EN
         )
     {
-        BSP_PRINTF("<uart#%d> bsp_uart_tx false\r\n", _n);
         return false;
     }
 
-    uart[_n].tx_dma->NDTR     = _size;
-    uart[_n].tx_dma->M0AR     = (uint32_t)_data;
+    uart[_n].tx_dma->NDTR     = buf_tmp->head.len;
+    uart[_n].tx_dma->M0AR     = (uint32_t)(buf_tmp->data);
     DMA_IFCR(uart[_n].tx_dma) = DMA_IF_LS(uart[_n].tx_dma, 0x3FU);
     uart[_n].tx_dma->CR      |= DMA_SxCR_EN;
 
@@ -516,20 +512,60 @@ bool bsp_uart_tx(const uint8_t _n, const uint8_t *const _data, const uint8_t _si
     SET_IRQ_PRI(_irq_num(uart[_n].uart), TX_PRI);
     uart[_n].uart->CR1 |=  (USART_CR1_TE);
 
-    BSP_PRINTF("<uart#%d> bsp_uart_tx true\r\n", _n);
+    BSP_PRINTF("<U%d>txT\n", _n);
+
     return true;
 }
 
-__WEAK void bsp_uart_tx_callback(const uint8_t _n, const bool _ok)
-{
-    BSP_PRINTF("<uart#%d> UART TX complete callback. Result: %s\r\n", _n, (_ok) ? "true" : "false");
-}
+/***************************************************************************************************
+ *                                      PUBLIC FUNCTIONS
+ **************************************************************************************************/
 
-__WEAK bool bsp_uart_rx_callback(const uint8_t _n, const uint8_t *const _data, const uint8_t _size)
+void bsp_uart_init(void)
 {
-    BSP_PRINTF("<uart#%d> UART RX callback addr: %#08X, size: %d bytes\r\n", _n, (uint32_t)_data, _size);
+    for (uint8_t i = 0; i < UART_CNT; i++)
+    {
+        _uart_init(i);
+        buf[i] = buf_catch(BUF_UART_RX_WAIT);
+        buf[i]->head.channel = i;
+        buf[i]->head.len = 0;
+    }
     
-    return true;
+#ifdef TEST_BSP_UART
+    for (volatile uint8_t i = 0; i < UART_CNT; i++)
+    {
+        buf_t *const buf_tmp = buf_catch(BUF_UART_TX_WAIT);
+        buf_tmp->head.channel = i;
+        buf_tmp->head.len = i + 3;
+        
+        for (volatile uint8_t j = 0; j < buf_tmp->head.len; j++)
+        {
+            buf_tmp->data[j] = (i << 4) | j;
+        }
+    }
+
+    for (volatile uint8_t i = 1; i < UART_CNT; i+=2)
+    {
+        while (!_bsp_uart_tx(i));
+    }
+
+    /* This delay is necessary because no byte receive interrupts have yet occurred at the start
+    of the cycle. Because of this, transmission begins on a line that is already receiving data. */
+    for (volatile uint16_t i = 0xFFF; i > 0; i--){};
+    
+    for (volatile uint8_t i = 0; i < UART_CNT; i+=2)
+    {
+        while (!_bsp_uart_tx(i));
+    }
+#endif
+}
+
+void bsp_uart_routine(void)
+{
+    for (int8_t i = UART_CNT - 1; i >= 0; i--)
+    {
+        _bsp_uart_tx(i);
+    }
 }
 
 /**************************************************************************************************

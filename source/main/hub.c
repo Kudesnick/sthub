@@ -8,11 +8,11 @@
  *   MCU Family:    STM32F
  *   Compiler:      ARMCC
  ***************************************************************************************************
- *   File:          main.c
+ *   File:          hub.c
  *   Description:
  *
  ***************************************************************************************************
- *   History:       13.04.2019 - file created
+ *   History:       2020/04/11 - file created
  *
  **************************************************************************************************/
 
@@ -22,19 +22,17 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
-#include "stm32f4xx_hal.h" // Device header
-#include "misc_macro.h"
-#include "bsp.h"
+
+#include "hub.h"
 #include "bsp_spi.h"
 #include "bsp_uart.h"
-#include "usr_io.h"
+#include "misc_macro.h"
+#include "fifo.h"
+#include "bsp.h"
 
 /***************************************************************************************************
  *                                       DEFINITIONS
  **************************************************************************************************/
-
-#define V_TAB_SIZE 0x76
 
 /***************************************************************************************************
  *                                      PRIVATE TYPES
@@ -65,65 +63,12 @@
  **************************************************************************************************/
 
 /***************************************************************************************************
- *                                    PUBLIC FUNCTIONS
+ *                                    WEAKLY FUNCTIONS
  **************************************************************************************************/
 
-#if !defined(__CC_ARM) && defined(__ARMCC_VERSION) && !defined(__OPTIMIZE__)
-    /*
-    Without this directive, it does not start if -o0 optimization is used and the "main"
-    function without parameters.
-    see http://www.keil.com/support/man/docs/armclang_mig/armclang_mig_udb1499267612612.htm
-    */
-    __asm(".global __ARM_use_no_argv\n\t" "__ARM_use_no_argv:\n\t");
-#endif
-
-typedef uint32_t v_tab_item_t;
-volatile const v_tab_item_t v_tab[V_TAB_SIZE] __attribute__((section("V_TAB_ADDR")));
-
-static void _relocate_vector_table(void)
-{
-    for (volatile uint16_t i = 0; i < sizeof(v_tab)/sizeof(v_tab[0]); i++)
-    {
-        volatile v_tab_item_t *const v_tab_ram = (v_tab_item_t *)v_tab;
-        volatile v_tab_item_t *const v_tab_rom = (v_tab_item_t *)SCB->VTOR;
-    
-        v_tab_ram[i] = v_tab_rom[i];
-    }
-    SCB->VTOR = (uint32_t)v_tab;
-}
-
-int main(void)
-{
-    _relocate_vector_table();
-
-    bsp_init();
-
-#ifdef DEBUG
-    printf(" \033[31mC\033[32mO\033[33mL\033[34mO\033[35mR\033[42m \033[0m"
-            "\033[36mT\033[37mE\033[30m\033[47mS\033[0mT\n"); // Color test
-    usr_put_routine();
-#endif
-
-    bsp_spi_init();
-    bsp_uart_init();
-
-#ifdef DEBUG
-    printf("Run\n");
-#endif
-
-    for(;;)
-    {
-#ifdef DEBUG
-        usr_put_routine();
-#endif
-        bsp_uart_routine();
-        __WFI();
-    }
-
-    BRK_PTR("Main function terminated.");
-
-    return 0;
-}
+/***************************************************************************************************
+ *                                    PUBLIC FUNCTIONS
+ **************************************************************************************************/
 
 /***************************************************************************************************
  *                                       END OF FILE

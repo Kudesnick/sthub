@@ -1,13 +1,13 @@
 /**
- *  @file       bsp_spi.h
+ *  @file       hub.h
  *
- *  @brief      hardware independent settings of SPI interface
+ *  @brief      
  *
  *  @details
  *
- *  @author     Stulov Tikhon (kudesnick@inbox.ru)
+ *  @author     Stulov Tikhon
  *
- *  @date       2020/03/08
+ *  @date       2020/04/11
  */
 
 #pragma once
@@ -18,6 +18,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /***************************************************************************************************
  *                                           DEFINITIONS                                           *
@@ -35,7 +39,9 @@
  *                                    PUBLIC FUNCTION PROTOTYPES                                   *
  **************************************************************************************************/
 
-void bsp_spi_init(void);
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 /***************************************************************************************************
  *                                        END OF FILE

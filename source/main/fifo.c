@@ -8,11 +8,11 @@
  *   MCU Family:    STM32F
  *   Compiler:      ARMCC
  ***************************************************************************************************
- *   File:          main.c
+ *   File:          fifo.c
  *   Description:
  *
  ***************************************************************************************************
- *   History:       13.04.2019 - file created
+ *   History:       2020/12/13 - file created
  *
  **************************************************************************************************/
 
@@ -20,21 +20,14 @@
  *                                      INCLUDED FILES
  **************************************************************************************************/
 
-#include <stdio.h>
+#include "fifo.h"
+
+#include <stdlib.h>
 #include <stdbool.h>
-#include <string.h>
-#include "stm32f4xx_hal.h" // Device header
-#include "misc_macro.h"
-#include "bsp.h"
-#include "bsp_spi.h"
-#include "bsp_uart.h"
-#include "usr_io.h"
 
 /***************************************************************************************************
  *                                       DEFINITIONS
  **************************************************************************************************/
-
-#define V_TAB_SIZE 0x76
 
 /***************************************************************************************************
  *                                      PRIVATE TYPES
@@ -47,6 +40,8 @@
 /***************************************************************************************************
  *                                       PRIVATE DATA
  **************************************************************************************************/
+
+buf_t buf_arr[BUF_CNT] __attribute__((section("DMA_BUFFERS")));
 
 /***************************************************************************************************
  *                                       PUBLIC DATA
@@ -65,64 +60,72 @@
  **************************************************************************************************/
 
 /***************************************************************************************************
+ *                                    WEAKLY FUNCTIONS
+ **************************************************************************************************/
+
+/***************************************************************************************************
  *                                    PUBLIC FUNCTIONS
  **************************************************************************************************/
 
-#if !defined(__CC_ARM) && defined(__ARMCC_VERSION) && !defined(__OPTIMIZE__)
-    /*
-    Without this directive, it does not start if -o0 optimization is used and the "main"
-    function without parameters.
-    see http://www.keil.com/support/man/docs/armclang_mig/armclang_mig_udb1499267612612.htm
-    */
-    __asm(".global __ARM_use_no_argv\n\t" "__ARM_use_no_argv:\n\t");
-#endif
 
-typedef uint32_t v_tab_item_t;
-volatile const v_tab_item_t v_tab[V_TAB_SIZE] __attribute__((section("V_TAB_ADDR")));
-
-static void _relocate_vector_table(void)
+buf_t *const buf_catch(const buf_state_t _head)
 {
-    for (volatile uint16_t i = 0; i < sizeof(v_tab)/sizeof(v_tab[0]); i++)
+    for (int8_t i = BUF_CNT - 1; i >= 0; i--)
     {
-        volatile v_tab_item_t *const v_tab_ram = (v_tab_item_t *)v_tab;
-        volatile v_tab_item_t *const v_tab_rom = (v_tab_item_t *)SCB->VTOR;
-    
-        v_tab_ram[i] = v_tab_rom[i];
+        uint8_t *const result = (uint8_t *)&buf_arr[i];
+        
+        if (__LDREXB(result) == BUF_FREE)
+        {
+            if (__STREXB(_head, result) == 0)
+            {
+                return (buf_t *const)result;
+            }
+        }
+        else
+        {
+            __CLREX();
+        }
     }
-    SCB->VTOR = (uint32_t)v_tab;
+    
+    return NULL;
 }
 
-int main(void)
+buf_t *const buf_get(const buf_state_t _state)
 {
-    _relocate_vector_table();
-
-    bsp_init();
-
-#ifdef DEBUG
-    printf(" \033[31mC\033[32mO\033[33mL\033[34mO\033[35mR\033[42m \033[0m"
-            "\033[36mT\033[37mE\033[30m\033[47mS\033[0mT\n"); // Color test
-    usr_put_routine();
-#endif
-
-    bsp_spi_init();
-    bsp_uart_init();
-
-#ifdef DEBUG
-    printf("Run\n");
-#endif
-
-    for(;;)
+    for (int8_t i = BUF_CNT - 1; i >= 0; i--)
     {
-#ifdef DEBUG
-        usr_put_routine();
-#endif
-        bsp_uart_routine();
-        __WFI();
+        buf_t *const result = &buf_arr[i];
+        
+        if (result->head.state == _state)
+        {
+            return result;
+        }
     }
 
-    BRK_PTR("Main function terminated.");
+    return NULL;
+}
 
-    return 0;
+buf_t *const buf_get_ch(const buf_state_t _state, const uint8_t _ch)
+{
+    for (int8_t i = BUF_CNT - 1; i >= 0; i--)
+    {
+        buf_t *const result = &buf_arr[i];
+        
+        if (true
+            && result->head.state == _state
+            && result->head.channel == _ch
+           )
+        {
+            return result;
+        }
+    }
+
+    return NULL;
+}
+
+void buf_free(buf_t *const _buf)
+{
+    _buf->head.free_status = 0;
 }
 
 /***************************************************************************************************

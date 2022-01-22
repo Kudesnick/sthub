@@ -2,6 +2,7 @@ output/
 keil*/DebugConfig
 *.uvguix.*
 *.uvgui.*
+*.uvopt*
 *.scvd
 keil*/Jlink*
 *.vscode
